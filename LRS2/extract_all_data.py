@@ -21,7 +21,7 @@ def extract_tar(tar_path, extract_to):
 
 
 # Create the dataset splits 
-def move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir):
+def move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir, root_path):
 
     if not os.path.exists(data_splits_dir):
         os.makedirs(data_splits_dir)
@@ -31,12 +31,17 @@ def move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir)
 
     # Process each .txt file for dataset directories
     for dataset in dataset_names:
-        txt_file_path = dataset + '.txt'
+        txt_file_path = os.path.join(root_path, dataset + '.txt')
         print(f"Processing {txt_file_path}...")
         if os.path.exists(txt_file_path):
             with open(txt_file_path, 'r') as file:
                 for line in file:
                     video_id = line.strip().split()[0]
+                    new_folder_path = os.path.join(data_splits_dir, dataset, video_id)
+
+                    if not os.path.exists(new_folder_path):
+                        os.makedirs(new_folder_path)
+                            
                     # Check in both 'main' and 'pretrain' directories
                     found = False
                     for search_dir in search_dirs:
@@ -44,13 +49,8 @@ def move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir)
                         text_path = os.path.join(extracted_directory, search_dir, video_id + '.txt')
 
                         if os.path.exists(video_path) and os.path.exists(text_path):
-                            # Move video & text file to a new folder within the certain dataset directory
-                            new_folder_path = os.path.join(data_splits_dir, dataset, video_id)
-                            if not os.path.exists(new_folder_path):
-                                os.makedirs(new_folder_path)
-                            
-                            shutil.move(video_path, os.path.join(new_folder_path + '.mp4'))
-                            shutil.move(text_path, os.path.join(new_folder_path + '.txt'))
+                            shutil.move(video_path, new_folder_path)
+                            shutil.move(text_path, new_folder_path)
                             print(f"Moved {video_id}.mp4 and {video_id}.txt to {new_folder_path}")
                             found = True
                             break
@@ -58,20 +58,22 @@ def move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir)
                         print(f"Files for {video_id} not found in any directory.")
         else:
             print(f"File {txt_file_path} does not exist")
+    
+    shutil.rmtree(extracted_directory)
 
 
 
 # Paths & params
-extract_to = 'extracted_data'  
+extract_to = './LRS2/extracted_data'  
 output_directory = '.'  
 dataset_names = ['pretrain', 'train', 'val', 'test']
 base_filename = 'lrs2_v1'
 parts = ['lrs2_v1_partaa', 'lrs2_v1_partab', 'lrs2_v1_partac', 'lrs2_v1_partad', 'lrs2_v1_partae']
-extracted_directory = 'extracted_data/mvlrs_v1'
-data_splits_dir = './data_splits'
+extracted_directory = './LRS2/extracted_data/mvlrs_v1'
+data_splits_dir = './LRS2/data_splits'
+root_path = './LRS2/'
+tar_file_path = './LRS2/lrs2_v1.tar' 
 
-# tar_file_path = 'lrs2_v1.tar' 
-
-tar_file_path = concatenate_parts(output_directory, base_filename, parts)
-extract_tar(tar_file_path, extract_to)
-move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir)
+# tar_file_path = concatenate_parts(output_directory, base_filename, parts)
+# extract_tar(tar_file_path, extract_to)
+move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir, root_path)
