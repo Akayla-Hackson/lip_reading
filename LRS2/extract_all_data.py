@@ -1,6 +1,7 @@
 import os
 import tarfile
 import shutil
+import cv2
 
 def concatenate_parts(output_dir, base_filename, parts):
     full_tar_path = os.path.join(output_dir, base_filename + '.tar')
@@ -61,8 +62,41 @@ def move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir,
     
     shutil.rmtree(extracted_directory)
 
+# Get frames from mp4 & save in directory (called in process_datasets)
+def extract_frames(video_path, frames_dir):
+    if not os.path.exists(frames_dir):
+        os.makedirs(frames_dir)
 
+    vidcap = cv2.VideoCapture(video_path)
+    success, image = vidcap.read()
+    count = 0
+    # fps = int(vidcap.get(cv2.CAP_PROP_FPS))
+    # print(fps)
 
+    while success:
+        cv2.imwrite(os.path.join(frames_dir, f"frame{count}.jpg"), image)  # save frame as jpg
+        success, image = vidcap.read()
+        count += 1
+    vidcap.release()
+
+# Moves thru directories to create the frames
+def process_datasets(root_dir, dataset_names):
+    for dataset in dataset_names:
+        dataset_path = os.path.join(root_dir, dataset)
+        if os.path.exists(dataset_path):
+            for video_id_dir in os.listdir(dataset_path):
+                video_id_path = os.path.join(dataset_path, video_id_dir)
+                if os.path.isdir(video_id_path):
+                    for number_dir in os.listdir(video_id_path):
+                        number_dir_path = os.path.join(video_id_path, number_dir)
+                        if os.path.isdir(number_dir_path):
+                            for item in os.listdir(number_dir_path):
+                                if item.endswith('.mp4'):
+                                    video_path = os.path.join(number_dir_path, item)
+                                    frames_dir = number_dir_path + '/frames'
+                                    print(f"Extracting frames from {video_path} to {frames_dir}")
+                                    extract_frames(video_path, frames_dir)
+                                   
 # Paths & params
 extract_to = './LRS2/extracted_data'  
 output_directory = '.'  
@@ -78,3 +112,4 @@ root_path = './LRS2/'
 tar_file_path = concatenate_parts(output_directory, base_filename, parts)
 extract_tar(tar_file_path, extract_to)
 move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir, root_path)
+process_datasets(data_splits_dir, dataset_names)

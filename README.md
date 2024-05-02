@@ -7,4 +7,5 @@ DATA SETUP STEPS:
            1) Concatinate the downloaded files into a .tar file
            2) Extract all the data from the .tar file (this creates 'main' and 'pretrain' folders
            3) Separates the data into the designated pretrain, train, val, test splits (based off of the given .txt files)
+           4) Loops thru the data splits and produces the frames for each mp4 file in the dataset (takes a longg time)
 
