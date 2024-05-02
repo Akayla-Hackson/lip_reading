@@ -72,8 +72,9 @@ parts = ['lrs2_v1_partaa', 'lrs2_v1_partab', 'lrs2_v1_partac', 'lrs2_v1_partad',
 extracted_directory = './LRS2/extracted_data/mvlrs_v1'
 data_splits_dir = './LRS2/data_splits'
 root_path = './LRS2/'
-tar_file_path = './LRS2/lrs2_v1.tar' 
 
-# tar_file_path = concatenate_parts(output_directory, base_filename, parts)
-# extract_tar(tar_file_path, extract_to)
+# tar_file_path = './LRS2/lrs2_v1.tar' 
+
+tar_file_path = concatenate_parts(output_directory, base_filename, parts)
+extract_tar(tar_file_path, extract_to)
 move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir, root_path)
