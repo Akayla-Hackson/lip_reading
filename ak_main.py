@@ -21,7 +21,6 @@ import numpy as np
 import random
 from torch import nn
 
-
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 RANDOM_SEED = 1729
 torch.manual_seed(RANDOM_SEED)
@@ -50,11 +49,17 @@ def main(args):
     os.makedirs(save_path, exist_ok=True)
     writer = SummaryWriter(f'runs/{save_path}')
 
-    train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train', transform=None)
+    train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/train", transform=None)
     print("Total samples loaded:", len(train_dataset))  # Debug: Output the total number of samples loaded
-    data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+    data_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        collate_fn=collate_fn
+        )
 
     model = LipReadingModel()
+    model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
 
@@ -68,6 +73,7 @@ def main(args):
             optimizer.zero_grad()
             
             output = model(frames, targets)
+            targets = targets.type(torch.float32)
             loss = criterion(output, targets.view(-1)) 
             loss.backward()
             optimizer.step()
@@ -88,13 +94,13 @@ def main(args):
 
 
 if __name__ == "__main__":
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cpu'
     print(device)
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
-    parser.add_argument('--batch_size', default=10, type=int, help='num entries per batch')
+    parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
     parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')

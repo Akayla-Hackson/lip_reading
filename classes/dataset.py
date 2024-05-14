@@ -24,7 +24,7 @@ class LipReadingDataset(Dataset):
             video_path = os.path.join(self.directory, video_folder)
             sub_folders = sorted(os.listdir(video_path))
 
-            for sub_folder in tqdm(sub_folders, desc=f"Loading dataset: {split_name}", leave=False):
+            for sub_folder in sub_folders:
                 sub_folder_path = os.path.join(video_path, sub_folder)
                 frames_dir = os.path.join(sub_folder_path, 'frames')
                 label_file = os.path.join(sub_folder_path, sub_folder + '.txt')
@@ -37,6 +37,9 @@ class LipReadingDataset(Dataset):
                     samples.append((frames, label))
                 else:
                     print("Skipped:", sub_folder_path)  # Debug
+
+            if os.getlogin() == "darke" and len(samples) > 1000:
+                break
 
         return samples
 
