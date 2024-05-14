@@ -10,7 +10,7 @@ class LipReadingModel(nn.Module):
         super().__init__()
         self.cnn = CNN()
         self.lstm = LSTM(input_dim=512, hidden_dim=256, num_layers=1)  
-        self.transformer = Transformer(feature_size=256, num_tokens=10000, num_heads=8, num_layers=6)
+        self.transformer = Transformer(feature_size=256, num_tokens=30522, num_heads=8, num_layers=6)
 
     def forward(self, x, tgt):
         # print("\nX shape:", x.shape)
@@ -31,7 +31,12 @@ class LipReadingModel(nn.Module):
         # print("transposed LSTM OUT:", lstm_out.shape)
 
         output = self.transformer(lstm_out, tgt)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
+        # print("transformer output:", output.shape)
+        output = output.permute(1, 2, 0)
+        # print("final output:", output.shape)
+
         
         # greedy decoding
-        output = output.squeeze().max(axis=1)[0]
+        # output = output.squeeze().max(axis=1)[0]
+        # print("final output:", output.shape)
         return output

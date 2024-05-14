@@ -22,6 +22,7 @@ import random
 from torch import nn
 
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
 RANDOM_SEED = 1729
 torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
@@ -35,7 +36,7 @@ def collate_fn(batch):
     padded_sequences = pad_sequence([torch.stack(seq) for seq in sequences], batch_first=True, padding_value=0.0)
     # Tokenize and pad labels
     encoded_labels = [tokenizer.encode(label, add_special_tokens=True, max_length=512, truncation=True) for label in labels]
-    padded_labels = pad_sequence([torch.tensor(label) for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
+    padded_labels = pad_sequence([torch.tensor(label, dtype=torch.long) for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
     
     return padded_sequences, padded_labels
 
@@ -61,20 +62,25 @@ def main(args):
     model = LipReadingModel()
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.CTCLoss()    # Outputs: [sequence_length, batch_size, num_classes] Targets: 1D tensor w/ concat labels for batch
+    criterion = nn.CrossEntropyLoss()  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
 
     for epoch in range(args.epochs):
         model.train() 
         total_loss = 0
-            
-        for batch_idx, (frames, targets) in enumerate(data_loader):
+        
+        progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
+        for batch_idx, (frames, targets) in progress_bar:
             frames, targets = frames.to(device), targets.to(device)
             # Reset gradients
             optimizer.zero_grad()
             
             output = model(frames, targets)
-            targets = targets.type(torch.float32)
-            loss = criterion(output, targets.view(-1)) 
+
+            # print("OUTPUTS:", output)
+            # print("TARGETS:", targets)
+
+            loss = criterion(output, targets) 
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -94,7 +100,8 @@ def main(args):
 
 
 if __name__ == "__main__":
-    device = 'cpu'
+    # device = 'cpu'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
 
     parser = argparse.ArgumentParser()

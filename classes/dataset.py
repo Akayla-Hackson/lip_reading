@@ -3,7 +3,6 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 import os
-from tqdm import tqdm
 
 class LipReadingDataset(Dataset):
     def __init__(self, directory, transform=None):
