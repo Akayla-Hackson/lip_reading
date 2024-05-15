@@ -40,9 +40,6 @@ def collate_fn(batch):
     
     return padded_sequences, padded_labels
 
-def encode_labels(labels):
-    return [tokenizer.encode(label, add_special_tokens=True) for label in labels]
-
 
 def main(args):
     now = datetime.datetime.now()
@@ -51,7 +48,7 @@ def main(args):
     writer = SummaryWriter(f'runs/{save_path}')
 
     train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/train", transform=None)
-    print("Total samples loaded:", len(train_dataset))  # Debug: Output the total number of samples loaded
+    print("Total samples loaded:", len(train_dataset))  
     data_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -74,16 +71,27 @@ def main(args):
         progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for batch_idx, (frames, targets) in progress_bar:
             frames, targets = frames.to(device), targets.to(device)
-            # Reset gradients
+           
             optimizer.zero_grad()
-            
             output = model(frames, targets)
+
+            temp = output.permute(2, 0, 1)
+            greedy = torch.argmax(temp, dim=-1)
+            decoded_sentences = [tokenizer.decode(greedy[:, i].tolist(), skip_special_tokens=False) for i in range(greedy.size(1))]
+            decoded_targets = [tokenizer.decode(t.tolist(), skip_special_tokens=False) for t in targets]
+            for idx, decoded_target in enumerate(decoded_targets):
+                print(f"\nTARGET: {decoded_target}")
+                print("Decoded:", decoded_sentences[idx])
 
             # print("OUTPUTS:", output)
             # print("TARGETS:", targets)
 
             loss = criterion(output, targets) 
             loss.backward()
+
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+
             optimizer.step()
             total_loss += loss.item()
             avg_loss += loss.item()
@@ -113,7 +121,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
-    parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
+    parser.add_argument('--batch_size', default=5, type=int, help='num entries per batch')
     parser.add_argument('--num_workers', default=4, type=int, help='num entries per batch')
 
 
