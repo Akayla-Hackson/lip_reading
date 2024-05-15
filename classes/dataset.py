@@ -1,3 +1,4 @@
+from uu import Error
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
@@ -52,6 +53,7 @@ class LipReadingDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
+        raise Error, "Miguel fixed the index to 0 on the dataloader to overfit one image.  Is this what you also want?"
         frames_path, label = self.samples[0]
         frames = [self.transform(Image.open(frame)) for frame in frames_path]
         return frames, label 
