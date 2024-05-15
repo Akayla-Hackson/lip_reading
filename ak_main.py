@@ -1,5 +1,6 @@
 import torch
 from torchvision import transforms
+import torch.optim as optim
 from PIL import Image
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
@@ -12,6 +13,20 @@ import torch
 import os
 from torch.nn.utils.rnn import pad_sequence
 from transformers import AutoTokenizer
+from tqdm import tqdm
+import argparse
+from torch.utils.tensorboard import SummaryWriter
+import datetime
+import numpy as np
+import random
+from torch import nn
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
+RANDOM_SEED = 1729
+torch.manual_seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+random.seed(RANDOM_SEED)
 
 
 # Pad each sequence to be the same length within the batch
@@ -19,10 +34,9 @@ def collate_fn(batch):
     sequences, labels = zip(*batch)
     # Pad frames
     padded_sequences = pad_sequence([torch.stack(seq) for seq in sequences], batch_first=True, padding_value=0.0)
-    
     # Tokenize and pad labels
     encoded_labels = [tokenizer.encode(label, add_special_tokens=True, max_length=512, truncation=True) for label in labels]
-    padded_labels = pad_sequence([torch.tensor(label) for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
+    padded_labels = pad_sequence([torch.tensor(label, dtype=torch.long) for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
     
     return padded_sequences, padded_labels
 
@@ -30,68 +44,80 @@ def encode_labels(labels):
     return [tokenizer.encode(label, add_special_tokens=True) for label in labels]
 
 
-def save_batch_images(images, batch_idx, n_max=5, save_dir='saved_images'):
+def main(args):
+    now = datetime.datetime.now()
+    save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
+    os.makedirs(save_path, exist_ok=True)
+    writer = SummaryWriter(f'runs/{save_path}')
 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/train", transform=None)
+    print("Total samples loaded:", len(train_dataset))  # Debug: Output the total number of samples loaded
+    data_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        # shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=args.num_workers,
+        )
 
-    fig, axs = plt.subplots(1, n_max, figsize=(15, 5))
-    for i, img in enumerate(images[:n_max]):
-        axs[i].imshow(img.permute(1, 2, 0))  # Permute the tensor to (H,W,C)
-        axs[i].axis('off')
-    
-    plt.savefig(f'{save_dir}/batch_{batch_idx+1}.png')
-    plt.close()
+    model = LipReadingModel()
+    model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    # criterion = nn.CTCLoss()    # Outputs: [sequence_length, batch_size, num_classes] Targets: 1D tensor w/ concat labels for batch
+    criterion = nn.CrossEntropyLoss()  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
 
-def test_data_loader():
-    # transform = transforms.Compose([
-    #     transforms.Resize((128, 128)),
-    #     transforms.ToTensor(),
-    # ])
-    transform = None
-    dataset = LipReadingDataset(directory='./LRS2/data_splits/train', transform=transform)
-    print("Total samples loaded:", len(dataset))  # Debug: Output the total number of samples loaded
-
-    data_loader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn)
-
-    for batch_idx, (padded_frames, padded_labels) in enumerate(data_loader):
-        print(f"Batch {batch_idx + 1}")
-        print("Padded frames shape:", padded_frames.shape)
-        print("Padded labels shape:", padded_labels.shape)
-        print("Padded labels:", padded_labels)
-        decoded_texts = [tokenizer.decode(ids) for ids in padded_labels]
-        print("Decoded labels:", decoded_texts)
-        if batch_idx == 0:  # Limit to checking a few batches
-            break
+    for epoch in range(args.epochs):
+        model.train() 
+        total_loss = 0
+        avg_loss = 0
         
+        progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
+        for batch_idx, (frames, targets) in progress_bar:
+            frames, targets = frames.to(device), targets.to(device)
+            # Reset gradients
+            optimizer.zero_grad()
+            
+            output = model(frames, targets)
 
-        # Save first few images of each batch
-        for i in range(len(padded_frames)):
-            print(f"Label {i+1}: {padded_labels[i]}")
-            save_batch_images(padded_frames[i], batch_idx, save_dir='saved_images')
+            # print("OUTPUTS:", output)
+            # print("TARGETS:", targets)
 
-        # Limit to inspecting a few batches
-        if batch_idx == 0:
-            break
+            loss = criterion(output, targets) 
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            avg_loss += loss.item()
+
+            writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
+            writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
+
+        print(tokenizer.batch_decode(targets))
+        print(tokenizer.batch_decode(model(frames, targets).max(axis=1)[0].type(torch.int)))
+        # Avg loss for the epoch
+        average_loss = total_loss / len(data_loader)
+        writer.add_scalar('Average Training Loss', average_loss, epoch)
+        print(f"Average Loss for Epoch {epoch}: {average_loss}")
+
+
+    # val_dataset = LipReadingDataset(directory='./LRS2/data_splits/val', transform=None)
+    # validation_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 
 
 
 if __name__ == "__main__":
-    # Initialize tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    test_data_loader()
+    # device = 'cpu'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
+    parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
+    parser.add_argument('--num_workers', default=4, type=int, help='num entries per batch')
 
 
-
-# model = LipReadingModel()
-# optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-# criterion = nn.CrossEntropyLoss()
-
-# for epoch in range(num_epochs):
-#     for images, labels in dataloader:
-#         optimizer.zero_grad()
-#         output = model(images, labels)
-#         loss = criterion(output, labels)
-#         loss.backward()
-#         optimizer.step()
+    parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
+    parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
+    args = parser.parse_args()
+    main(args)

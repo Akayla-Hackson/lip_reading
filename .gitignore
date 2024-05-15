@@ -4,3 +4,6 @@
 lrs2_v1_part*
 *.jpg
 *.png
+runs
+*.pyc
+.pyc
