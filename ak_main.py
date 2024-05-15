@@ -55,8 +55,9 @@ def main(args):
     data_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=True,
-        collate_fn=collate_fn
+        # shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=args.num_workers,
         )
 
     model = LipReadingModel()
@@ -68,6 +69,7 @@ def main(args):
     for epoch in range(args.epochs):
         model.train() 
         total_loss = 0
+        avg_loss = 0
         
         progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for batch_idx, (frames, targets) in progress_bar:
@@ -84,9 +86,13 @@ def main(args):
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            avg_loss += loss.item()
 
             writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
+            writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
 
+        print(tokenizer.batch_decode(targets))
+        print(tokenizer.batch_decode(model(frames, targets).max(axis=1)[0].type(torch.int)))
         # Avg loss for the epoch
         average_loss = total_loss / len(data_loader)
         writer.add_scalar('Average Training Loss', average_loss, epoch)
@@ -108,6 +114,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
     parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
+    parser.add_argument('--num_workers', default=4, type=int, help='num entries per batch')
+
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
     parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')

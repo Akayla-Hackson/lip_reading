@@ -1,19 +1,23 @@
 import torch
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 import os
+from torchvision import transforms as t 
 
 class LipReadingDataset(Dataset):
-    def __init__(self, directory, transform=None):
+    def __init__(self, directory, transform=None, resolution=0.5):
         """
         Args:
             directory (string): Directory with all the video folders.
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.directory = directory
-        self.transform = transform or transforms.ToTensor()
+        transform = [t.ToTensor(), t.Resize((int(180*resolution), int(180*resolution))), ]  # 90x90
+        self.transform  = t.Compose(transform)
         self.samples = self._load_samples()
+        self.resolution = resolution
 
     def _load_samples(self):
         samples = []
@@ -48,7 +52,7 @@ class LipReadingDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        frames_path, label = self.samples[idx]
+        frames_path, label = self.samples[0]
         frames = [self.transform(Image.open(frame)) for frame in frames_path]
         return frames, label 
 

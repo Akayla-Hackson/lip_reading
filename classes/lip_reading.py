@@ -4,6 +4,7 @@ from classes.cnn import CNN
 from classes.lstm import LSTM
 from classes.transformer import Transformer
 import torch.nn.functional as F
+import torch
 
 class LipReadingModel(nn.Module):
     def __init__(self):
