@@ -101,8 +101,8 @@ def process_datasets(root_dir, dataset_names):
 extract_to = './LRS2/extracted_data'  
 output_directory = '.'  
 dataset_names = ['pretrain', 'train', 'val', 'test']
-base_filename = 'lrs2_v1'
-parts = ['lrs2_v1_partaa', 'lrs2_v1_partab', 'lrs2_v1_partac', 'lrs2_v1_partad', 'lrs2_v1_partae']
+base_filename = 'lrw-v1-partaa'
+parts = ['lrw-v1-partaa']
 extracted_directory = './LRS2/extracted_data/mvlrs_v1'
 data_splits_dir = './LRS2/data_splits'
 root_path = './LRS2/'
