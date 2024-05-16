@@ -77,7 +77,7 @@ def lrw_move_files_based_on_txt(extracted_directory, dataset_names, data_splits_
             contents = os.listdir(file_paths)
             for sample in contents:
                 if sample.endswith('.mp4'):
-                    video_id = re.find(r'\d+', sample)
+                    video_id = re.search(r'\d+', sample).group()
 
                     new_folder_path = os.path.join(data_splits_dir, dataset, video_id)
 
@@ -88,7 +88,7 @@ def lrw_move_files_based_on_txt(extracted_directory, dataset_names, data_splits_
 
 
                 if sample.endswith('.txt'):
-                    video_id = re.find(r'\d+', sample)  
+                    video_id = re.search(r'\d+', sample).group()  
                     new_folder_path = os.path.join(data_splits_dir, dataset, video_id)
                     shutil.move(sample, new_folder_path)
 
@@ -147,5 +147,5 @@ root_path = './LRS2/'
 
 # tar_file_path = concatenate_parts(output_directory, base_filename, parts)
 # extract_tar(tar_file_path, extract_to)
-move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir, root_path)
+lrw_move_files_based_on_txt(extracted_directory, dataset_names, data_splits_dir, root_path)
 process_datasets(data_splits_dir, dataset_names)
