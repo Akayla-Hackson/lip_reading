@@ -5,6 +5,10 @@ class Transformer(nn.Module):
     def __init__(self, feature_size=256, num_tokens=10000, num_heads=8, num_layers=6):
         super().__init__()
         self.embedding = nn.Embedding(num_tokens, feature_size)
+
+        # encoder_layer = nn.TransformerEncoderLayer(d_model=feature_size, nhead=num_heads)
+        # self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
         transformer_decoder_layer = nn.TransformerDecoderLayer(d_model=feature_size, nhead=num_heads)
         self.transformer_decoder = nn.TransformerDecoder(transformer_decoder_layer, num_layers=num_layers)
         self.output_layer = nn.Linear(feature_size, num_tokens)

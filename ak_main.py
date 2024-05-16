@@ -16,12 +16,17 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 import argparse
 from torch.utils.tensorboard import SummaryWriter
+from transformers import DistilBertForSequenceClassification, DistilBertTokenizer, DistilBertConfig
 import datetime
 import numpy as np
 import random
 from torch import nn
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+
+config = DistilBertConfig(num_labels=30522, output_hidden_states=False) 
+tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
+trans_model = DistilBertForSequenceClassification(config=config)
+tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
 RANDOM_SEED = 1729
 torch.manual_seed(RANDOM_SEED)
@@ -35,13 +40,11 @@ def collate_fn(batch):
     # Pad frames
     padded_sequences = pad_sequence([torch.stack(seq) for seq in sequences], batch_first=True, padding_value=0.0)
     # Tokenize and pad labels
-    encoded_labels = [tokenizer.encode(label, add_special_tokens=True, max_length=512, truncation=True) for label in labels]
-    padded_labels = pad_sequence([torch.tensor(label, dtype=torch.long) for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
+    encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
+    # loss_targets = torch.stack(encoded_labels["input_ids"])
+    # padded_labels = pad_sequence([label for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
     
-    return padded_sequences, padded_labels
-
-def encode_labels(labels):
-    return [tokenizer.encode(label, add_special_tokens=True) for label in labels]
+    return padded_sequences, encoded_labels
 
 
 def main(args):
@@ -51,7 +54,7 @@ def main(args):
     writer = SummaryWriter(f'runs/{save_path}')
 
     train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/train", transform=None)
-    print("Total samples loaded:", len(train_dataset))  # Debug: Output the total number of samples loaded
+    print("Total samples loaded:", len(train_dataset))  
     data_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -60,7 +63,7 @@ def main(args):
         num_workers=args.num_workers,
         )
 
-    model = LipReadingModel()
+    model = LipReadingModel(trans_model)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     # criterion = nn.CTCLoss()    # Outputs: [sequence_length, batch_size, num_classes] Targets: 1D tensor w/ concat labels for batch
@@ -73,17 +76,28 @@ def main(args):
         
         progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for batch_idx, (frames, targets) in progress_bar:
-            frames, targets = frames.to(device), targets.to(device)
-            # Reset gradients
+            frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
+           
             optimizer.zero_grad()
-            
-            output = model(frames, targets)
+            output = model(frames, input_id, mask)
+
+            # temp = output.permute(2, 0, 1)
+            # greedy = torch.argmax(temp, dim=-1)
+            # decoded_sentences = [tokenizer.decode(greedy[:, i].tolist(), skip_special_tokens=False) for i in range(greedy.size(1))]
+            # decoded_targets = [tokenizer.decode(t.tolist(), skip_special_tokens=False) for t in targets]
+            # for idx, decoded_target in enumerate(decoded_targets):
+            #     print(f"\nTARGET: {decoded_target}")
+            #     print("Decoded:", decoded_sentences[idx])
 
             # print("OUTPUTS:", output)
             # print("TARGETS:", targets)
 
-            loss = criterion(output, targets) 
+            loss = criterion(output, input_id) 
             loss.backward()
+
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+
             optimizer.step()
             total_loss += loss.item()
             avg_loss += loss.item()
@@ -91,8 +105,15 @@ def main(args):
             writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
             writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
 
-        print(tokenizer.batch_decode(targets))
-        print(tokenizer.batch_decode(model(frames, targets).max(axis=1)[0].type(torch.int)))
+        temp = output.permute(2, 0, 1)
+        greedy = torch.argmax(temp, dim=-1)
+        decoded_sentences = [tokenizer.decode(greedy[:, i].tolist(), skip_special_tokens=False) for i in range(greedy.size(1))]
+        decoded_targets = [tokenizer.decode(t.tolist(), skip_special_tokens=False) for t in targets]
+        for idx, decoded_target in enumerate(decoded_targets):
+            print(f"\nTARGET: {decoded_target}")
+            print("Decoded:", decoded_sentences[idx])
+        # print(tokenizer.batch_decode(targets))
+        # print(tokenizer.batch_decode(model(frames, targets).max(axis=1)[0].type(torch.int)))
         # Avg loss for the epoch
         average_loss = total_loss / len(data_loader)
         writer.add_scalar('Average Training Loss', average_loss, epoch)
@@ -113,7 +134,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
-    parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
+    parser.add_argument('--batch_size', default=2, type=int, help='num entries per batch')
     parser.add_argument('--num_workers', default=4, type=int, help='num entries per batch')
 
 

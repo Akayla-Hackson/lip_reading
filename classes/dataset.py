@@ -33,16 +33,17 @@ class LipReadingDataset(Dataset):
                 frames_dir = os.path.join(sub_folder_path, 'frames')
                 label_file = os.path.join(sub_folder_path, sub_folder + '.txt')
                  
-                # print("Checking:", sub_folder_path)  # Debug
+                # print("Checking:", sub_folder_path)  
 
                 if os.path.exists(label_file) and os.path.isdir(frames_dir):
                     label = self.read_phrase_from_file(label_file)
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
                     samples.append((frames, label))
                 else:
-                    print("Skipped:", sub_folder_path)  # Debug
+                    print("Skipped:", sub_folder_path)  
 
-            if os.getlogin() == "darke" and len(samples) > 1000:
+            # if os.getlogin() == "darke" and len(samples) > 1000:
+            if len(samples) > 1000:
                 break
 
         return samples
@@ -53,8 +54,8 @@ class LipReadingDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        raise Error, "Miguel fixed the index to 0 on the dataloader to overfit one image.  Is this what you also want?"
-        frames_path, label = self.samples[0]
+        frames_path, label = self.samples[idx]
+        # frames_path, label = self.samples[0]
         frames = [self.transform(Image.open(frame)) for frame in frames_path]
         return frames, label 
 
