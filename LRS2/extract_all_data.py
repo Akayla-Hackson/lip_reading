@@ -72,12 +72,12 @@ def lrw_move_files_based_on_txt(extracted_directory, dataset_names, data_splits_
 
     # Process each .txt file for dataset directories
     for word in os.listdir(extract_path):
-        dir_path = os.path.join(extract_path, word)
-        for dataset in os.listdir(dir_path):
-            dir_path = os.path.join(extract_path, word, dataset)
-            for sample in os.listdir(dir_path):
-                video_id = re.search(r'\d+', sample).group()
-                sampel_path = os.path.join(extract_path, word, dataset, sample)
+        word_dir_path = os.path.join(extract_path, word)
+        for dataset in os.listdir(word_dir_path):
+            dataset_dir_path = os.path.join(word_dir_path, dataset)
+            for sample in os.listdir(dataset_dir_path):
+                video_id = os.path.splitext(sample)[0]
+                sampel_path = os.path.join(dataset_dir_path, sample)
                 new_folder_path = os.path.join(data_splits_dir, dataset, video_id)
                 if not os.path.exists(new_folder_path):
                         os.makedirs(new_folder_path)
