@@ -115,13 +115,16 @@ def process_datasets(root_dir, dataset_names):
                 if os.path.isdir(video_id_path):
                     for number_dir in os.listdir(video_id_path):
                         number_dir_path = os.path.join(video_id_path, number_dir)
-                        if os.path.isdir(number_dir_path):
-                            for item in os.listdir(number_dir_path):
-                                if item.endswith('.mp4'):
-                                    video_path = os.path.join(number_dir_path, item)
-                                    frames_dir = number_dir_path + '/frames'
-                                    print(f"Extracting frames from {video_path} to {frames_dir}")
-                                    extract_frames(video_path, frames_dir)
+                        if number_dir.endswith('.mp4'):
+                            frames_dir = video_id_path + '/frames'
+                            extract_frames(number_dir_path, frames_dir)
+                        # if os.path.isdir(number_dir_path):
+                        #     for item in os.listdir(number_dir_path):
+                        #         if item.endswith('.mp4'):
+                        #             video_path = os.path.join(number_dir_path, item)
+                        #             frames_dir = number_dir_path + '/frames'
+                        #             print(f"Extracting frames from {video_path} to {frames_dir}")
+                        #             extract_frames(video_path, frames_dir)
                                    
 # Paths & params
 extract_to = './LRS2/extracted_data'  
