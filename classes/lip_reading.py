@@ -7,14 +7,13 @@ import torch.nn.functional as F
 import torch
 
 class LipReadingModel(nn.Module):
-    def __init__(self, model):
+    def __init__(self, _):
         super().__init__()
         self.cnn = CNN()
         self.lstm = LSTM(input_dim=512, hidden_dim=256, num_layers=1)  
-        # self.transformer = Transformer(feature_size=512, num_tokens=30522, num_heads=8, num_layers=6)
-        self.transformer = model
+        self.transformer = Transformer(feature_size=256, num_tokens=30522, num_heads=8, num_layers=6)
 
-    def forward(self, x, tgt, mask):
+    def forward(self, x, tgt, _):
         # print("\nX shape:", x.shape)
         batch_size, seq_len, c, h, w = x.shape
         x = x.view(batch_size * seq_len, c, h, w)
@@ -34,11 +33,22 @@ class LipReadingModel(nn.Module):
 
         output = self.transformer(lstm_out, tgt)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
         # print("transformer output:", output.shape)
-        output = output.permute(1, 2, 0)     # Expected shape: (batch_size, vocab_size, target_sequence_length)  <-- needed for cross entropy loss
+        output = output.permute(1, 2, 0)
         # print("final output:", output.shape)
 
         
         # greedy decoding
-        # greedy = output.squeeze().max(axis=1)[0]
-        # print("final prediction:", greedy.shape)
+        # output = output.squeeze().max(axis=1)[0]
+        # print("final output:", output.shape)
         return output
+
+
+        # lstm_out = lstm_out.reshape(batch_size * 100 , -1)
+        # # print("transposed LSTM OUT:", lstm_out.shape)
+
+        # output = self.transformer(lstm_out.type(torch.int))   # Expected shape: (target_sequence_length, batch_size, vocab_size)
+        # # print("transformer output:", output.shape)
+        # # output = output.permute(1, 2, 0)     # Expected shape: (batch_size, vocab_size, target_sequence_length)  <-- needed for cross entropy loss
+        # # output = torch.argmax(output["logits"], dim=-1)
+        # output = output["logits"].view(batch_size, 100, -1)
+        # output = output.permute(0, 2, 1)

@@ -21,6 +21,7 @@ import datetime
 import numpy as np
 import random
 from torch import nn
+from transformers import get_constant_schedule_with_warmup
 
 
 config = DistilBertConfig(num_labels=30522, output_hidden_states=False) 
@@ -37,14 +38,9 @@ random.seed(RANDOM_SEED)
 # Pad each sequence to be the same length within the batch
 def collate_fn(batch):
     sequences, labels = zip(*batch)
-    # Pad frames
-    padded_sequences = pad_sequence([torch.stack(seq) for seq in sequences], batch_first=True, padding_value=0.0)
-    # Tokenize and pad labels
     encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
-    # loss_targets = torch.stack(encoded_labels["input_ids"])
-    # padded_labels = pad_sequence([label for label in encoded_labels], batch_first=True, padding_value=tokenizer.pad_token_id)
     
-    return padded_sequences, encoded_labels
+    return torch.unsqueeze(torch.stack(sequences[0]), axis=0), encoded_labels
 
 
 def main(args):
@@ -58,72 +54,66 @@ def main(args):
     data_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        # shuffle=True,
+        shuffle=True,
         collate_fn=collate_fn,
         num_workers=args.num_workers,
+        pin_memory=False,
         )
 
     model = LipReadingModel(trans_model)
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
+    scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
     # criterion = nn.CTCLoss()    # Outputs: [sequence_length, batch_size, num_classes] Targets: 1D tensor w/ concat labels for batch
-    criterion = nn.CrossEntropyLoss()  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
+    criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
 
     for epoch in range(args.epochs):
         model.train() 
         total_loss = 0
-        avg_loss = 0
+        avg_loss = loss_accum = 0
+        k = 16
         
         progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for batch_idx, (frames, targets) in progress_bar:
             frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
            
-            optimizer.zero_grad()
             output = model(frames, input_id, mask)
 
-            # temp = output.permute(2, 0, 1)
-            # greedy = torch.argmax(temp, dim=-1)
-            # decoded_sentences = [tokenizer.decode(greedy[:, i].tolist(), skip_special_tokens=False) for i in range(greedy.size(1))]
-            # decoded_targets = [tokenizer.decode(t.tolist(), skip_special_tokens=False) for t in targets]
-            # for idx, decoded_target in enumerate(decoded_targets):
-            #     print(f"\nTARGET: {decoded_target}")
-            #     print("Decoded:", decoded_sentences[idx])
-
-            # print("OUTPUTS:", output)
-            # print("TARGETS:", targets)
-
             loss = criterion(output, input_id) 
-            loss.backward()
+            loss_accum += loss
+            loss = loss.detach()
+            total_loss += loss
+            avg_loss += loss
 
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            if batch_idx != 0 and batch_idx % k == 0:
+                optimizer.zero_grad()
+                loss_accum.backward()
+                del loss_accum
+                nn.utils.clip_grad_norm_(model.parameters(), 1, error_if_nonfinite=True)
+                loss_accum = 0
+                optimizer.step()
+                scheduler.step()
 
-
-            optimizer.step()
-            total_loss += loss.item()
-            avg_loss += loss.item()
-
-            writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
+            writer.add_scalar('Training Loss', loss, epoch * len(data_loader) + batch_idx)
             writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
+            del loss, frames, mask, targets
 
-        temp = output.permute(2, 0, 1)
-        greedy = torch.argmax(temp, dim=-1)
-        decoded_sentences = [tokenizer.decode(greedy[:, i].tolist(), skip_special_tokens=False) for i in range(greedy.size(1))]
-        decoded_targets = [tokenizer.decode(t.tolist(), skip_special_tokens=False) for t in targets]
-        for idx, decoded_target in enumerate(decoded_targets):
-            print(f"\nTARGET: {decoded_target}")
-            print("Decoded:", decoded_sentences[idx])
-        # print(tokenizer.batch_decode(targets))
-        # print(tokenizer.batch_decode(model(frames, targets).max(axis=1)[0].type(torch.int)))
-        # Avg loss for the epoch
+            
+        print("target \n",tokenizer.batch_decode(input_id))
+        print("Guess \n",tokenizer.batch_decode(torch.argmax(output, dim=1)))
         average_loss = total_loss / len(data_loader)
         writer.add_scalar('Average Training Loss', average_loss, epoch)
         print(f"Average Loss for Epoch {epoch}: {average_loss}")
+        state = {
+            'epoch': epoch,
+            'state_dict': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            }
+        torch.save(state, f"{epoch}")
 
 
     # val_dataset = LipReadingDataset(directory='./LRS2/data_splits/val', transform=None)
     # validation_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-
 
 
 if __name__ == "__main__":
@@ -134,11 +124,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
-    parser.add_argument('--batch_size', default=2, type=int, help='num entries per batch')
+    parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
     parser.add_argument('--num_workers', default=4, type=int, help='num entries per batch')
 
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
+    # 3e-4 
     parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)

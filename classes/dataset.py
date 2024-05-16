@@ -49,8 +49,8 @@ class LipReadingDataset(Dataset):
                     samples.append((frames, label))
 
             # if os.getlogin() == "darke" and len(samples) > 1000:
-            if len(samples) > 1000:
-                break
+            # if len(samples) > 100:
+            #     break
 
         return samples
 
