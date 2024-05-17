@@ -44,11 +44,11 @@ class LipReadingDataset(Dataset):
                 #     samples.append((frames, label))
                 # else:
                 #     print("Skipped:", sub_folder_path)  
-                    label = ''.join(re.findall(r'[A-Za-z]', sub_folder))
+                    label = os.path.splitext(sub_folder)[0]
+                    label = ''.join(re.findall(r'[A-Za-z]', label))
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
                     samples.append((frames, label))
-                # else:
-                #     print("Skipped:", sub_folder_path)  
+                
 
             # if os.getlogin() == "darke" and len(samples) > 1000:
             # if len(samples) > 100:
