@@ -54,7 +54,7 @@ class Transformer(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
         self.pos_encoder = PositionalEncoding(feature_size)
 
-    def forward(self, x, tgt, max_len=100, train=False):
+    def forward(self, x, tgt, mask, max_len=100, train=False):
         if not train:
             start_token_id = self.tokenizer.cls_token_id
             stop_token_id = self.tokenizer.sep_token_id
@@ -102,5 +102,5 @@ class Transformer(nn.Module):
             tgt_emb = self.embedding(tgt)
             tgt_emb = self.pos_encoder(tgt_emb)
             tgt_emb = tgt_emb.transpose(0, 1)
-            out = self.transformer_decoder(tgt_emb, x)
+            out = self.transformer_decoder(tgt_emb, x, tgt_key_padding_mask=mask)
             return self.output_layer(out)

@@ -73,9 +73,12 @@ def main(args):
             
             progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
             for batch_idx, (frames, targets) in progress_bar:
-                frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
+                frames, input_id, masks = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].bool().to(device, non_blocking=True)
+
+                print("target \n",tokenizer.batch_decode(input_id))
+
             
-                output = model(frames, input_id, mask, args.train)
+                output = model(frames, input_id, masks, args.train)
 
                 loss = criterion(output, input_id) 
                 loss_accum += loss
@@ -94,7 +97,7 @@ def main(args):
 
                 writer.add_scalar('Training Loss', loss, epoch * len(data_loader) + batch_idx)
                 writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
-                del loss, frames, mask, targets
+                del loss, frames, masks, targets
 
                 
                 print("target \n",tokenizer.batch_decode(input_id))
@@ -174,13 +177,13 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
     parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
-    parser.add_argument('--train', default=False, type=bool, help='Train or eval')
+    parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
 
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=2, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=1, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)

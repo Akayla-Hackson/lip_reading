@@ -23,7 +23,7 @@ class LipReadingModel(nn.Module):
         lstm_out, _ = self.lstm(cnn_out)   # Expected shape: (batch_size, sequence_length (num_frames), features)
         lstm_out = lstm_out.transpose(0, 1)   # Expected shape: (sequence_length (num_frames), batch_size, features)
 
-        output = self.transformer(lstm_out, tgt, train=train)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
+        output = self.transformer(lstm_out, tgt, mask, train=train)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
         output = output.permute(1, 2, 0)
         
         return output
