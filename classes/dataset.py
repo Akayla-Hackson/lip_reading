@@ -31,7 +31,7 @@ class LipReadingDataset(Dataset):
 
             for sub_folder in sub_folders:
                 sub_folder_path = os.path.join(video_path, sub_folder)
-                frames_dir = os.path.join(sub_folder_path, 'frames')
+                frames_dir = os.path.join(video_path, 'frames')
                 if os.path.exists(frames_dir):
                     
                 #label_file = os.path.join(sub_folder_path, sub_folder + '.txt')
@@ -44,7 +44,7 @@ class LipReadingDataset(Dataset):
                 #     samples.append((frames, label))
                 # else:
                 #     print("Skipped:", sub_folder_path)  
-                    label = ''.join(re.findall(r'[A-Za-z]', sub_folder_path))
+                    label = ''.join(re.findall(r'[A-Za-z]', sub_folder))
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
                     samples.append((frames, label))
 
