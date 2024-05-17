@@ -75,7 +75,7 @@ def main(args):
             for batch_idx, (frames, targets) in progress_bar:
                 frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
             
-                output = model(frames, input_id, mask)
+                output = model(frames, input_id, mask, args.train)
 
                 loss = criterion(output, input_id) 
                 loss_accum += loss
@@ -171,13 +171,13 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
     parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
-    parser.add_argument('--train', default=False, type=bool, help='Train or eval')
+    parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
 
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=200, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)

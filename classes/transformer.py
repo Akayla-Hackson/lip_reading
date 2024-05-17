@@ -90,6 +90,8 @@ class Transformer(nn.Module):
             logits_history = logits_history[:i+1]
             return logits_history
         else:
-            tgt = self.embedding(tgt).transpose(0, 1)
+            tgt_emb = self.embedding(outputs)
+            tgt_emb = self.pos_encoder(tgt_emb)
+            tgt_emb = tgt_emb.transpose(0, 1)
             out = self.transformer_decoder(tgt, x)
             return self.output_layer(out)
