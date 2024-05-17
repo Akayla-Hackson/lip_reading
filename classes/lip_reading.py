@@ -7,13 +7,13 @@ import torch.nn.functional as F
 import torch
 
 class LipReadingModel(nn.Module):
-    def __init__(self, _):
+    def __init__(self):
         super().__init__()
         self.cnn = CNN()
         self.lstm = LSTM(input_dim=512, hidden_dim=256, num_layers=1)  
         self.transformer = Transformer(feature_size=256, num_tokens=30522, num_heads=8, num_layers=6)
 
-    def forward(self, x, tgt, _):
+    def forward(self, x, tgt, mask):
         # print("\nX shape:", x.shape)
         batch_size, seq_len, c, h, w = x.shape
         x = x.view(batch_size * seq_len, c, h, w)
@@ -36,10 +36,7 @@ class LipReadingModel(nn.Module):
         output = output.permute(1, 2, 0)
         # print("final output:", output.shape)
 
-        
-        # greedy decoding
-        # output = output.squeeze().max(axis=1)[0]
-        # print("final output:", output.shape)
+
         return output
 
 
