@@ -21,19 +21,27 @@ import math
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        self.encoding = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / (d_model // 2))).type_as(position)
+  def __init__(self, d_model: int,  max_length: int = 5000):
+      # d_model:      dimension of embeddings
+      # dropout:      randomly zeroes-out some of the input
+      # max_length:   max sequence length
+    super().__init__()     
 
-        self.encoding[:, 0::2] = torch.sin(position * div_term)
-        self.encoding[:, 1::2] = torch.cos(position * div_term)
-        self.encoding = self.encoding.unsqueeze(0).transpose(0, 1)
+    pe = torch.zeros(max_length, d_model)    
+    k = torch.arange(0, max_length).unsqueeze(1)  
+    div_term = torch.exp(                                 
+            torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)
+    )
+    pe[:, 0::2] = torch.sin(k * div_term)      
+    pe[:, 1::2] = torch.cos(k * div_term)    
+    pe = pe.unsqueeze(0)                              
+    self.register_buffer("pe", pe)                        
 
-    def forward(self, x):
-        device = x.device
-        return x + self.encoding[:x.size(0), :].to(device)
+  def forward(self, x):
+    # x: embeddings (batch_size, seq_length, d_model)
+    # Returns: embeddings + positional encodings (batch_size, seq_length, d_model)
+    x = x + self.pe[:, : x.size(1)].requires_grad_(False) 
+    return x
 
 
 class Transformer(nn.Module):
@@ -46,7 +54,7 @@ class Transformer(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
         self.pos_encoder = PositionalEncoding(feature_size)
 
-    def forward(self, x, tgt=None, max_len=100, train=False):
+    def forward(self, x, tgt, max_len=100, train=False):
         if not train:
             start_token_id = self.tokenizer.cls_token_id
             stop_token_id = self.tokenizer.sep_token_id

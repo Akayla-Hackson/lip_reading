@@ -97,8 +97,8 @@ def main(args):
                 del loss, frames, mask, targets
 
                 
-            print("target \n",tokenizer.batch_decode(input_id))
-            print("Guess \n",tokenizer.batch_decode(torch.argmax(output, dim=1)))
+                print("target \n",tokenizer.batch_decode(input_id))
+                print("Guess \n",tokenizer.batch_decode(torch.argmax(output, dim=1)))
             average_loss = total_loss / len(data_loader)
             writer.add_scalar('Average Training Loss', average_loss, epoch)
             print(f"Average Loss for Epoch {epoch}: {average_loss}")
@@ -178,6 +178,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=200, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=2, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)
