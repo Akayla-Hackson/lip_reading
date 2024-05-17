@@ -93,5 +93,5 @@ class Transformer(nn.Module):
             tgt_emb = self.embedding(tgt)
             tgt_emb = self.pos_encoder(tgt_emb)
             tgt_emb = tgt_emb.transpose(0, 1)
-            out = self.transformer_decoder(tgt, x)
+            out = self.transformer_decoder(tgt_emb, x)
             return self.output_layer(out)
