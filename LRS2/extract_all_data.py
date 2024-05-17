@@ -2,7 +2,10 @@ import os
 import tarfile
 import shutil
 import cv2
+<<<<<<< HEAD
 import re 
+=======
+>>>>>>> main
 
 def concatenate_parts(output_dir, base_filename, parts):
     full_tar_path = os.path.join(output_dir, base_filename + '.tar')
