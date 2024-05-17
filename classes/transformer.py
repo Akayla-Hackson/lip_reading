@@ -72,14 +72,15 @@ class Transformer(nn.Module):
                 out = self.transformer_decoder(tgt_emb, x)
                 logits = self.output_layer(out)
                 
-                k=15
-                top_logits, top_indices = torch.topk(logits[-1, :, :], k)
-                top_tokens = [self.tokenizer.decode([idx]) for idx in top_indices[0].tolist()] 
-                current_output_tokens = self.tokenizer.decode(outputs[0].tolist())
-                print(f"Current output tokens: {current_output_tokens}")
-                print(f"Top {k} logits at step {i}: {top_logits}")
-                print(f"Top {k} tokens: {top_tokens}")
-                # exit()
+                if(i % 15 == 0):
+                    k=15
+                    top_logits, top_indices = torch.topk(logits[-1, :, :], k)
+                    top_tokens = [self.tokenizer.decode([idx]) for idx in top_indices[0].tolist()] 
+                    current_output_tokens = self.tokenizer.decode(outputs[0].tolist())
+                    print(f"Current output tokens: {current_output_tokens}")
+                    print(f"Top {k} logits at step {i}: {top_logits}")
+                    print(f"Top {k} tokens: {top_tokens}")
+                    # exit()
 
                 logits_history[i] = logits[-1, :, :]
 

@@ -109,6 +109,10 @@ def main(args):
                 }
             torch.save(state, f"{epoch}.state")
     else:
+        save_path = f'Val/{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
+        os.makedirs(save_path, exist_ok=True)
+        writer = SummaryWriter(f'runs/{save_path}')
+
         model.load_state_dict(torch.load("0.state")['state_dict'])
         model.eval()
         print(model)
@@ -122,9 +126,7 @@ def main(args):
         num_workers=args.num_workers,
         pin_memory=False,
         )
-        # val_progress_bar = tqdm(enumerate(val_data_loader), total=len(val_data_loader))
-        # validation_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        total_correct = 0
+
         total_words = 0
         total_wer = 0.0
         num_samples = 0
@@ -133,30 +135,31 @@ def main(args):
         for batch_idx, (frames, targets) in enumerate(val_data_loader):
             with torch.no_grad():
                 frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
-                # print("target \n",tokenizer.batch_decode(input_id))
+                print("target \n",tokenizer.batch_decode(input_id))
                 output = model(frames, input_id, mask, args.train)
                 output = output.argmax(axis=1)
-                # total_correct += torch.sum(output == input_id).detach().item()
-                # total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
                 
                 predicted_texts = tokenizer.batch_decode(output, skip_special_tokens=True)
                 reference_texts = tokenizer.batch_decode(input_id, skip_special_tokens=True)
                 
                 # Calc WER for each item in the batch and accumulate
                 for predicted, reference in zip(predicted_texts, reference_texts):
-                    total_wer += wer(reference, predicted)
+                    sample_wer = wer(reference, predicted)
+                    total_wer += sample_wer
                     num_samples += 1
                 # print("Predictions:", predicted_texts)
                 # print("References:", reference_texts)
 
             print("target \n",tokenizer.batch_decode(input_id))
             print("Guess \n",tokenizer.batch_decode(output))
-        # accuracy = total_correct / total_words
-        # print(f"accuracy: {accuracy}")
+            print("WER:", sample_wer)
+            writer.add_scalar('Val WER', sample_wer, len(val_data_loader) + batch_idx)
         
         # Calc avg WER across all samples
         average_wer = total_wer / num_samples
         print(f"Average WER: {average_wer:.2f}")
+        writer.add_scalar('Average WER', average_wer)
+        writer.add_scalar('Average WER', average_wer)
 
 
 
@@ -171,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
     parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
-    parser.add_argument('--train', default=True, type=bool, help='Train or eval')
+    parser.add_argument('--train', default=False, type=bool, help='Train or eval')
 
 
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
