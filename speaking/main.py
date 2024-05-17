@@ -1,43 +1,16 @@
+from torchvision.datasets import VisionDataset
+
 import torch
-from torchvision import transforms
-import torch.optim as optim
-from PIL import Image
-import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-from classes.dataset import LipReadingDataset
-from classes.cnn import CNN
-from classes.lstm import LSTM
-from classes.transformer import Transformer
-from classes.lip_reading import LipReadingModel
-import torch
-import os
-from torch.nn.utils.rnn import pad_sequence
-from transformers import AutoTokenizer
-from tqdm import tqdm
 import argparse
-from torch.utils.tensorboard import SummaryWriter
-from transformers import DistilBertForSequenceClassification, DistilBertTokenizer, DistilBertConfig
-import datetime
+import tensorboard
 import numpy as np
-import random
-from torch import nn
-from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
-from jiwer import wer
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
-RANDOM_SEED = 1729
-torch.manual_seed(RANDOM_SEED)
-np.random.seed(RANDOM_SEED)
-random.seed(RANDOM_SEED)
-
-
-# Pad each sequence to be the same length within the batch
 def collate_fn(batch):
     sequences, labels = zip(*batch)
     encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
     
     return torch.unsqueeze(torch.stack(sequences[0]), axis=0), encoded_labels
+
 
 
 def main(args):
@@ -108,60 +81,6 @@ def main(args):
                 'optimizer': optimizer.state_dict(),
                 }
             torch.save(state, f"{epoch}.state")
-    else:
-        model.load_state_dict(torch.load("0.state")['state_dict'])
-        model.eval()
-        print(model)
-
-        val_dataset = LipReadingDataset(directory='./LRS2/data_splits/val' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/val", transform=None)
-        val_data_loader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        collate_fn=collate_fn,
-        num_workers=args.num_workers,
-        pin_memory=False,
-        )
-        # val_progress_bar = tqdm(enumerate(val_data_loader), total=len(val_data_loader))
-        # validation_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        total_correct = 0
-        total_words = 0
-        total_wer = 0.0
-        num_samples = 0
-        print("Total samples loaded for validation:", len(val_data_loader))  
-
-        for batch_idx, (frames, targets) in enumerate(val_data_loader):
-            with torch.no_grad():
-                frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
-                # print("target \n",tokenizer.batch_decode(input_id))
-                output = model(frames, input_id, mask, args.train)
-                output = output.argmax(axis=1)
-                # total_correct += torch.sum(output == input_id).detach().item()
-                # total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
-                
-                predicted_texts = tokenizer.batch_decode(output, skip_special_tokens=True)
-                reference_texts = tokenizer.batch_decode(input_id, skip_special_tokens=True)
-                
-                # Calc WER for each item in the batch and accumulate
-                for predicted, reference in zip(predicted_texts, reference_texts):
-                    total_wer += wer(reference, predicted)
-                    num_samples += 1
-                total_correct += torch.sum(output == input_id).detach().item()
-                total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
-                # print("Predictions:", predicted_texts)
-                # print("References:", reference_texts)
-
-            print("target \n",tokenizer.batch_decode(input_id))
-            print("Guess \n",tokenizer.batch_decode(output))
-        # accuracy = total_correct / total_words
-        # print(f"accuracy: {accuracy}")
-        
-        # Calc avg WER across all samples
-        accuracy = total_correct / total_words
-        average_wer = total_wer / num_samples
-        print(f"Average WER: {average_wer:.2f}")
-        print(f"accuracy: {accuracy}")
-
 
 
 
