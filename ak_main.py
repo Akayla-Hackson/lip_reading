@@ -22,7 +22,7 @@ import numpy as np
 import random
 from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
-
+from jiwer import wer
 
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
@@ -113,7 +113,7 @@ def main(args):
         model.eval()
         print(model)
 
-        val_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/val", transform=None)
+        val_dataset = LipReadingDataset(directory='./LRS2/data_splits/val' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/val", transform=None)
         val_data_loader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
@@ -126,19 +126,37 @@ def main(args):
         # validation_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         total_correct = 0
         total_words = 0
+        total_wer = 0.0
+        num_samples = 0
         print("Total samples loaded for validation:", len(val_data_loader))  
 
         for batch_idx, (frames, targets) in enumerate(val_data_loader):
             with torch.no_grad():
                 frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
-                output = model(frames, input_id, mask)
+                # print("target \n",tokenizer.batch_decode(input_id))
+                output = model(frames, input_id, mask, args.train)
                 output = output.argmax(axis=1)
-                total_correct += torch.sum(output == input_id).detach().item()
-                total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
+                # total_correct += torch.sum(output == input_id).detach().item()
+                # total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
+                
+                predicted_texts = tokenizer.batch_decode(output, skip_special_tokens=True)
+                reference_texts = tokenizer.batch_decode(input_id, skip_special_tokens=True)
+                
+                # Calc WER for each item in the batch and accumulate
+                for predicted, reference in zip(predicted_texts, reference_texts):
+                    total_wer += wer(reference, predicted)
+                    num_samples += 1
+                # print("Predictions:", predicted_texts)
+                # print("References:", reference_texts)
+
             print("target \n",tokenizer.batch_decode(input_id))
             print("Guess \n",tokenizer.batch_decode(output))
-        accuracy = total_correct / total_words
-        print(f"accuracy: {accuracy}")
+        # accuracy = total_correct / total_words
+        # print(f"accuracy: {accuracy}")
+        
+        # Calc avg WER across all samples
+        average_wer = total_wer / num_samples
+        print(f"Average WER: {average_wer:.2f}")
 
 
 
