@@ -75,10 +75,19 @@ def main(args):
             for batch_idx, (frames, targets) in progress_bar:
                 frames, input_id, masks = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].bool().to(device, non_blocking=True)
 
-                print("target \n",tokenizer.batch_decode(input_id))
+                # decoded_sequences = tokenizer.batch_decode(input_id, skip_special_tokens=False)
+                # for idx, seq in enumerate(decoded_sequences):
+                #     token_count = (input_id[idx] != tokenizer.pad_token_id).sum()
+                #     print("Decoded sequence:", seq)
+                #     print("Number of tokens (excluding padding):", token_count.item())
+                # tokens = tokenizer.convert_ids_to_tokens(input_id[0])  
+                # print(tokens)
 
+                # print(tokenizer.batch_decode(input_id, skip_special_tokens=False))
+                # print(masks)
+                # exit()
             
-                output = model(frames, input_id, masks, args.train)
+                output = model(frames, input_id, args.train)
 
                 loss = criterion(output, input_id) 
                 loss_accum += loss
@@ -139,7 +148,7 @@ def main(args):
             with torch.no_grad():
                 frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
                 print("target \n",tokenizer.batch_decode(input_id))
-                output = model(frames, input_id, mask, args.train)
+                output = model(frames, input_id, args.train)
                 output = output.argmax(axis=1)
                 
                 predicted_texts = tokenizer.batch_decode(output, skip_special_tokens=True)

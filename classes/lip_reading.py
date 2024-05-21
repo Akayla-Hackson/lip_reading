@@ -11,9 +11,9 @@ class LipReadingModel(nn.Module):
         super().__init__()
         self.cnn = CNN()
         self.lstm = LSTM(input_dim=512, hidden_dim=256, num_layers=1)  
-        self.transformer = Transformer(feature_size=256, num_tokens=30522, num_heads=8, num_layers=6)
+        self.transformer = Transformer(feature_size=256, num_heads=8, num_layers=6)
 
-    def forward(self, x, tgt, mask, train):
+    def forward(self, x, tgt, train):
         batch_size, seq_len, c, h, w = x.shape
         x = x.view(batch_size * seq_len, c, h, w)
 
@@ -23,7 +23,7 @@ class LipReadingModel(nn.Module):
         lstm_out, _ = self.lstm(cnn_out)   # Expected shape: (batch_size, sequence_length (num_frames), features)
         lstm_out = lstm_out.transpose(0, 1)   # Expected shape: (sequence_length (num_frames), batch_size, features)
 
-        output = self.transformer(lstm_out, tgt, mask, train=train)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
+        output = self.transformer(lstm_out, tgt, train=train)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
         output = output.permute(1, 2, 0)
         
         return output
