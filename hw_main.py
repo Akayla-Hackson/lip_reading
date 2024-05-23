@@ -9,6 +9,9 @@ from classes.cnn import CNN
 from classes.lstm import LSTM
 from classes.transformer import Transformer
 from classes.lip_reading import LipReadingModel
+from classes.hw_lip_reading import HwLipReadingModel
+from classes.hw_transformer import *
+from classes.hw_transformer_layers import *
 import torch
 import os
 from torch.nn.utils.rnn import pad_sequence
@@ -38,11 +41,17 @@ def collate_fn(batch):
     encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
     
     return torch.unsqueeze(torch.stack(sequences[0]), axis=0), encoded_labels
+# def collate_fn(batch):
+#     sequences, labels = zip(*batch)
+#     sequences = torch.stack(sequences) 
+#     encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest", return_tensors='pt')
+#     return sequences, encoded_labels
 
 
 def main(args):
     now = datetime.datetime.now()
-    model = LipReadingModel()
+    # model = LipReadingModel()
+    model = HwLipReadingModel()
     model.to(device)
 
     if args.train:
@@ -65,52 +74,41 @@ def main(args):
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
         scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_dataset)/args.grad_accum_steps))
         criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
-
+        
+        loss_history = []
         for epoch in range(args.epochs):
             model.train() 
-            total_loss = 0
-            avg_loss = loss_accum = 0
+            total_loss = 0 
+            # avg_loss = loss_accum = 0
             
             progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
             for batch_idx, (frames, targets) in progress_bar:
                 frames, input_id, masks = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].bool().to(device, non_blocking=True)
 
-                # decoded_sequences = tokenizer.batch_decode(input_id, skip_special_tokens=False)
-                # for idx, seq in enumerate(decoded_sequences):
-                #     token_count = (input_id[idx] != tokenizer.pad_token_id).sum()
-                #     print("Decoded sequence:", seq)
-                #     print("Number of tokens (excluding padding):", token_count.item())
-                # tokens = tokenizer.convert_ids_to_tokens(input_id[0])  
-                # print(tokens)
+                captions_in = input_id[:, :-1].to(device)
+                captions_out = input_id[:, 1:].to(device)
+                mask = (captions_out != tokenizer.pad_token_id).to(device)
 
-                # print(tokenizer.batch_decode(input_id, skip_special_tokens=False))
-                # print(masks)
-                # exit()
-            
-                output = model(frames, input_id, args.train)
-
-                loss = criterion(output, input_id) 
-                loss_accum += loss
-                loss = loss.detach()
-                total_loss += loss
-                avg_loss += loss
-
-                if batch_idx != 0 and batch_idx % args.grad_accum_steps == 0:
-                    optimizer.zero_grad()
-                    loss_accum.backward()
-                    del loss_accum
-                    nn.utils.clip_grad_norm_(model.parameters(), 1, error_if_nonfinite=True)
-                    loss_accum = 0
-                    optimizer.step()
-                    scheduler.step()
-
-                writer.add_scalar('Training Loss', loss, epoch * len(data_loader) + batch_idx)
-                writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
-                del loss, frames, masks, targets
-
+                # print("captions in", captions_in)
+                # print(tokenizer.batch_decode(captions_in, skip_special_tokens=False))
+                # print("captions out", captions_out)
+                # print(tokenizer.batch_decode(captions_out, skip_special_tokens=False))
                 
+
+
+                logits = model(frames, captions_in, args.train)
+                
+                # loss = transformer_temporal_softmax_loss(logits, captions_out, mask)
+                loss = criterion(logits[mask], captions_out[mask])
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
+
+                writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
+
                 print("target \n",tokenizer.batch_decode(input_id))
-                print("Guess \n",tokenizer.batch_decode(torch.argmax(output, dim=1)))
+                print("Guess \n",tokenizer.batch_decode(torch.argmax(logits, dim=1)))
             average_loss = total_loss / len(data_loader)
             writer.add_scalar('Average Training Loss', average_loss, epoch)
             print(f"Average Loss for Epoch {epoch}: {average_loss}")
@@ -159,8 +157,6 @@ def main(args):
                     sample_wer = wer(reference, predicted)
                     total_wer += sample_wer
                     num_samples += 1
-                total_correct += torch.sum(output == input_id).detach().item()
-                total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
                 # print("Predictions:", predicted_texts)
                 # print("References:", reference_texts)
 
@@ -170,15 +166,25 @@ def main(args):
             writer.add_scalar('Val WER', sample_wer, len(val_data_loader) + batch_idx)
         
         # Calc avg WER across all samples
-        accuracy = total_correct / total_words
         average_wer = total_wer / num_samples
         print(f"Average WER: {average_wer:.2f}")
-        print(f"accuracy: {accuracy}")
         writer.add_scalar('Average WER', average_wer)
         writer.add_scalar('Average WER', average_wer)
 
 
+def transformer_temporal_softmax_loss(x, y, mask):
 
+        N, T, V = x.shape
+
+        x_flat = x.reshape(N * T, V)
+        y_flat = y.reshape(N * T)
+        mask_flat = mask.reshape(N * T)
+
+        loss = torch.nn.functional.cross_entropy(x_flat,  y_flat, reduction='none')
+        loss = torch.mul(loss, mask_flat)
+        loss = torch.mean(loss)
+
+        return loss
 
 if __name__ == "__main__":
     # device = 'cpu'
