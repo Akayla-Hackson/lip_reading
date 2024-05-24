@@ -73,13 +73,13 @@ def main(args):
         optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
         scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_dataset)/args.grad_accum_steps))
-        criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
-        
+        # criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, vocab size, sequence_length] Targets: [batch_size, sequence_length]
+        criterion = nn.BCELoss()
         loss_history = []
         for epoch in range(args.epochs):
             model.train() 
             total_loss = 0 
-            # avg_loss = loss_accum = 0
+            avg_loss = loss_accum = 0
             
             progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
             for batch_idx, (frames, targets) in progress_bar:
@@ -93,19 +93,37 @@ def main(args):
                 # print(tokenizer.batch_decode(captions_in, skip_special_tokens=False))
                 # print("captions out", captions_out)
                 # print(tokenizer.batch_decode(captions_out, skip_special_tokens=False))
-                
-
+                captions_out_one_hot = one_hot_encoding(captions_out, num_classes=tokenizer.vocab_size)
+                captions_out_one_hot = captions_out_one_hot.permute(0, 2, 1)
 
                 logits = model(frames, captions_in, args.train)
-                
+                logits = torch.sigmoid(logits) 
+                logits = logits.permute(0, 2, 1)
                 # loss = transformer_temporal_softmax_loss(logits, captions_out, mask)
-                loss = criterion(logits[mask], captions_out[mask])
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                total_loss += loss.item()
+                # loss = criterion(logits, captions_out)
+                loss = criterion(logits, captions_out_one_hot)
 
-                writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+                # total_loss += loss.item()
+                loss_accum += loss
+                loss = loss.detach()
+                total_loss += loss
+                avg_loss += loss
+
+                if batch_idx != 0 and batch_idx % args.grad_accum_steps == 0:
+                    optimizer.zero_grad()
+                    loss_accum.backward()
+                    del loss_accum
+                    nn.utils.clip_grad_norm_(model.parameters(), 1, error_if_nonfinite=True)
+                    loss_accum = 0
+                    optimizer.step()
+                    scheduler.step()
+
+                # writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
+                writer.add_scalar('Training Loss', loss, epoch * len(data_loader) + batch_idx)
+                writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
 
                 print("target \n",tokenizer.batch_decode(input_id))
                 print("Guess \n",tokenizer.batch_decode(torch.argmax(logits, dim=1)))
@@ -171,6 +189,11 @@ def main(args):
         writer.add_scalar('Average WER', average_wer)
         writer.add_scalar('Average WER', average_wer)
 
+def one_hot_encoding(labels, num_classes):
+    target = torch.zeros(labels.size(0), labels.size(1), num_classes, device=labels.device)
+    # Scatter 1s into tensor according to labels
+    target.scatter_(2, labels.unsqueeze(2), 1)
+    return target
 
 def transformer_temporal_softmax_loss(x, y, mask):
 
