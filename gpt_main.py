@@ -32,9 +32,7 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
 gpt2_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 config = GPT2Config.from_pretrained('gpt2')
 config.add_cross_attention = True
-gpt2_model = GPT2LMHeadModel(config)
-for parameter in gpt2_model.lm_head.parameters():        
-    parameter.requires_grad = True
+
 RANDOM_SEED = 1729
 torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
@@ -52,7 +50,9 @@ def main(args):
     for parameter in model.parameters():        
         parameter.requires_grad = True
     model.to(device)
-
+    gpt2_model = GPT2LMHeadModel(config).to(device)
+    for parameter in gpt2_model.lm_head.parameters():        
+        parameter.requires_grad = True
     if args.train:
         save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
         os.makedirs(save_path, exist_ok=True)
@@ -84,6 +84,7 @@ def main(args):
                 # targets: {'input_ids': tensor([[ 101, 2009, 1005, 1055, 2183, 2000, 2175, 2006, 2046, 1996, 2925,  102]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
                 # frames, input_id, masks = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].bool().to(device, non_blocking=True)
                 frames = frames.to(device, non_blocking=True)
+                targets = targets.to(device)
                 # frames.size: torch.Size([1, 53, 3, 90, 90])
                 # print(frames.size())
 
@@ -102,8 +103,8 @@ def main(args):
                 # input_length = input_ids.shape[1]
                 # [1, 8]
                 # print(input_ids.size())
-                
                 outputs = gpt2_model(inputs_embeds=embeds[:, :targets.size(1), :], labels=targets)
+                
                 # outputs = gpt2_model(inputs_embeds=embeds, labels=targets)
                 # [1, 20, 50257]
                 # print(outputs.logits.size())
@@ -112,6 +113,7 @@ def main(args):
                 # targets = targets.view(-1).float()
                 # print(logits.size())
                 # print(targets.size())
+                
                 loss = outputs.loss
                 # loss = criterion(outputs.logits, targets)
                 # print(loss)
@@ -191,29 +193,14 @@ def main(args):
         writer.add_scalar('Average WER', average_wer)
         writer.add_scalar('Average WER', average_wer)
 
-
-def transformer_temporal_softmax_loss(x, y, mask):
-
-        N, T, V = x.shape
-
-        x_flat = x.reshape(N * T, V)
-        y_flat = y.reshape(N * T)
-        mask_flat = mask.reshape(N * T)
-
-        loss = torch.nn.functional.cross_entropy(x_flat,  y_flat, reduction='none')
-        loss = torch.mul(loss, mask_flat)
-        loss = torch.mean(loss)
-
-        return loss
-
 if __name__ == "__main__":
-    device = 'cpu'
-    # if torch.cuda.is_available():
-    #     device = torch.device('cuda')
-    # elif torch.backends.mps.is_available():      
-    #     device = 'mps'                         
-    # else:
-    #     device = torch.device('cpu')
+    # device = 'cpu'
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    elif torch.backends.mps.is_available():      
+        device = 'mps'                         
+    else:
+        device = torch.device('cpu')
     print(device)
 
     parser = argparse.ArgumentParser()
