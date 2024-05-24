@@ -129,8 +129,8 @@ def main(args):
                 predicted_text = gpt2_tokenizer.decode(generated_ids[0], skip_special_tokens=True)
                 # [1, 28]
                 # print(generated_ids.size())
-                #print("target \n",labels)
-                #print("Guess \n",predicted_text)
+                print("target \n",labels)
+                print("Guess \n",predicted_text)
             average_loss = total_loss / len(data_loader)
             writer.add_scalar('Average Training Loss', average_loss, epoch)
             print(f"Average Loss for Epoch {epoch}: {average_loss}")
