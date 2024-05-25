@@ -26,6 +26,7 @@ import random
 from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
 from jiwer import wer
+from matplotlib.lines import Line2D
 
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
@@ -73,8 +74,8 @@ def main(args):
         optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
         scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_dataset)/args.grad_accum_steps))
-        # criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, vocab size, sequence_length] Targets: [batch_size, sequence_length]
-        criterion = nn.BCELoss()
+        criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, vocab size, sequence_length] Targets: [batch_size, sequence_length]
+
         loss_history = []
         for epoch in range(args.epochs):
             model.train() 
@@ -93,15 +94,11 @@ def main(args):
                 # print(tokenizer.batch_decode(captions_in, skip_special_tokens=False))
                 # print("captions out", captions_out)
                 # print(tokenizer.batch_decode(captions_out, skip_special_tokens=False))
-                captions_out_one_hot = one_hot_encoding(captions_out, num_classes=tokenizer.vocab_size)
-                captions_out_one_hot = captions_out_one_hot.permute(0, 2, 1)
 
                 logits = model(frames, captions_in, args.train)
-                logits = torch.sigmoid(logits) 
                 logits = logits.permute(0, 2, 1)
                 # loss = transformer_temporal_softmax_loss(logits, captions_out, mask)
-                # loss = criterion(logits, captions_out)
-                loss = criterion(logits, captions_out_one_hot)
+                loss = criterion(logits, captions_out)
 
                 # optimizer.zero_grad()
                 # loss.backward()
@@ -115,6 +112,7 @@ def main(args):
                 if batch_idx != 0 and batch_idx % args.grad_accum_steps == 0:
                     optimizer.zero_grad()
                     loss_accum.backward()
+                    plot_grad_flow(model.named_parameters())
                     del loss_accum
                     nn.utils.clip_grad_norm_(model.parameters(), 1, error_if_nonfinite=True)
                     loss_accum = 0
@@ -209,6 +207,53 @@ def transformer_temporal_softmax_loss(x, y, mask):
 
         return loss
 
+def plot_grad_flow(named_parameters):
+    ave_grads = []
+    layers = []
+    for n, p in named_parameters:
+        if(p.requires_grad) and ("bias" not in n):
+            layers.append(n)
+            ave_grads.append(p.grad.abs().mean())
+    ave_grads_cpu = [grad.cpu() for grad in ave_grads]
+    plt.plot(ave_grads_cpu, alpha=0.3, color="b")
+    plt.hlines(0, 0, len(ave_grads_cpu)+1, linewidth=1, color="k" )
+    plt.xticks(range(0,len(ave_grads_cpu), 1), layers, rotation="vertical")
+    plt.xlim(xmin=0, xmax=len(ave_grads_cpu))
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow")
+    plt.grid(True)
+    plt.show()
+# def plot_grad_flow(named_parameters):
+#     '''Plots the gradients flowing through different layers in the net during training.
+#     Can be used for checking for possible gradient vanishing / exploding problems.
+    
+#     Usage: Plug this function in Trainer class after loss.backwards() as 
+#     "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
+#     ave_grads = []
+#     max_grads= []
+#     layers = []
+#     for n, p in named_parameters:
+#         if(p.requires_grad) and ("bias" not in n):
+#             layers.append(n)
+#             ave_grads.append(p.grad.abs().mean())
+#             max_grads.append(p.grad.abs().max())
+#     max_grads_cpu = [grad.cpu() for grad in max_grads]
+#     ave_grads_cpu = [grad.cpu() for grad in ave_grads]
+#     plt.bar(np.arange(len(max_grads_cpu)), max_grads_cpu, alpha=0.1, lw=1, color="c")
+#     plt.bar(np.arange(len(ave_grads_cpu)), ave_grads_cpu, alpha=0.1, lw=1, color="b")
+#     plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
+#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
+#     plt.xlim(left=0, right=len(ave_grads))
+#     plt.ylim(bottom = -0.001, top=0.02) # zoom in on the lower gradient regions
+#     plt.xlabel("Layers")
+#     plt.ylabel("average gradient")
+#     plt.title("Gradient flow")
+#     plt.grid(True)
+#     plt.legend([Line2D([0], [0], color="c", lw=4),
+#                 Line2D([0], [0], color="b", lw=4),
+#                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
+#     plt.show() 
 if __name__ == "__main__":
     # device = 'cpu'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

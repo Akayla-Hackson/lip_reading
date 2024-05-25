@@ -43,6 +43,8 @@ class LipReadingTransformer(nn.Module):
 
         captions_embedded = self.embedding(captions)  
         captions_embedded = self.positional_encoding(captions_embedded) 
+
+        # features = self.positional_encoding(features) 
         # print("captions shape after embedding and positional encoding", captions.shape)
 
         tgt_mask = torch.tril(torch.ones((seq_len, seq_len), device=captions.device)).bool()
