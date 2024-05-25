@@ -1,7 +1,6 @@
-import torch
 from torch.utils.data import DataLoader
 from dataloader import LipReadingDataset
-from speak import Speaking_conv3d_layers
+from speak import Speaking_conv3d_layers, Speaking_words
 import torch
 import os
 from tqdm import tqdm
@@ -11,6 +10,8 @@ import datetime
 from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
 import torchvision
+from transformers import AutoTokenizer
+
 
 torch.manual_seed(42)
 
@@ -57,13 +58,34 @@ def validate(loader, model, criterion, writer=None, total_len=0, idx=0, isWrite=
 def main(args):
     length_video = 125 
     now = datetime.datetime.now()
-    model = Speaking_conv3d_layers(512, length_video)
+    tokenizer=AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    if args.useWords:
+        checkpoint = torch.load(args.bestSpeakWeightsPath)  # use best weights of speaking
+        model = Speaking_words(512, length_video, tokenizer.vocab_size)
+        weights = list(checkpoint['state_dict'].values())
+        params = []
+        i = 0
+        for name, param in model.named_parameters():
+            if "conv" in name and i < 32: 
+                param.data = weights[i]
+                i += 1
+            else:
+                params.append(param)
+        assert i == 32, f"not all weights were used only {i} out of 32"
+    else:
+        model = Speaking_conv3d_layers(512, length_video)
     model.to(device)
     weight = torch.tensor([0.77, 0.23]).to(device)
-    criterion = nn.CrossEntropyLoss(weight=weight)
+    if not args.useWords:
+        criterion = nn.CrossEntropyLoss(weight=weight)
+    else:
+        criterion = nn.CrossEntropyLoss()
+
     train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/project/LRS2/data_splits/train",
                                 transform=None,
-                                length_video=length_video)
+                                length_video=length_video,
+                                mode="word",
+                                tokenizer=tokenizer)
     print("Total samples loaded:", len(train_dataset))  
     train_set, val_set = torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.9), len(train_dataset) - int(len(train_dataset)*0.9)])
 
@@ -89,12 +111,8 @@ def main(args):
     if args.train:
         save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
         os.makedirs(save_path, exist_ok=True)
-        writer = SummaryWriter(f'runs_speak/{save_path}')
-
-
-        
-        
-        optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
+        writer = SummaryWriter(f'runs_speak/{"words_" if args.useWords else ""}{save_path}')
+        optimizer = torch.optim.AdamW(model.parameters() if args.useWords != True  else params, betas=(0.99, 0.95), lr=args.learning_rate)
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
         scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps))
   # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
@@ -105,8 +123,9 @@ def main(args):
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps), last_epoch=1)
-
-
+        if args.compile:
+            print("Compiling....")
+            model = torch.compile(model,)
         for epoch in range(args.epochs):
             model.train() 
             total_loss = 0
@@ -156,10 +175,9 @@ def main(args):
             validate(val_data_loader, model, criterion, writer, epoch * len(train_data_loader), batch_idx)
 
     else:
-        model.load_state_dict(torch.load("0.state")['state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.load_state_dict(torch.load(args.bestSpeakWeightsPath)['state_dict'])
         model.eval()
-        validate(val_data_loader, model, criterion, epoch * len(train_data_loader), batch_idx)
+        validate(val_data_loader, model, criterion)
 
 
 
@@ -182,7 +200,14 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', default=6e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
     parser.add_argument('--epochs', default=12, type=int, help='num epoch to train for')
-    parser.add_argument('--resume', default=True, type=bool, help='resume training')
+    parser.add_argument('--resume', default=False, type=bool, help='resume training')
+    parser.add_argument('--useWords', default=True, type=bool, help='train on words')
+    parser.add_argument('--compile', default=False, type=bool, help='compile model')
+
+    parser.add_argument('--bestSpeakWeightsPath', default="weights_trimed.state", type=str, help='train on words')
+
+
+
 
     
     args = parser.parse_args()
