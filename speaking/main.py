@@ -59,19 +59,20 @@ def main(args):
     length_video = 125 
     now = datetime.datetime.now()
     tokenizer=AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    if args.useWords:
-        checkpoint = torch.load(args.bestSpeakWeightsPath)  # use best weights of speaking
+    if args.useWords :
         model = Speaking_words(512, length_video, tokenizer.vocab_size)
-        weights = list(checkpoint['state_dict'].values())
-        params = []
-        i = 0
-        for name, param in model.named_parameters():
-            if "conv" in name and i < 32: 
-                param.data = weights[i]
-                i += 1
-            else:
-                params.append(param)
-        assert i == 32, f"not all weights were used only {i} out of 32"
+        if args.train:
+            checkpoint = torch.load(args.bestSpeakWeightsPath)  # use best weights of speaking
+            weights = list(checkpoint['state_dict'].values())
+            params = []
+            i = 0
+            for name, param in model.named_parameters():
+                if "conv" in name and i < 32: 
+                    param.data = weights[i]
+                    i += 1
+                else:
+                    params.append(param)
+            assert i == 32, f"not all weights were used only {i} out of 32"
     else:
         model = Speaking_conv3d_layers(512, length_video)
     model.to(device)
@@ -79,9 +80,9 @@ def main(args):
     if not args.useWords:
         criterion = nn.CrossEntropyLoss(weight=weight)
     else:
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(ignore_index=1)
 
-    base_path = "D:/classes/project/data/" if args.useCloud != True else  "/home/jupyter/"
+    base_path = "D:/classes/project/" if args.useCloud != True else  "/home/jupyter/data/"
 
     train_dataset = LipReadingDataset(directory=base_path + "LRS2/data_splits/train",
                                 transform=None,
@@ -125,9 +126,11 @@ def main(args):
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps), last_epoch=1)
+ 
         if args.compile:
             print("Compiling....")
             model = torch.compile(model,)
+ 
         for epoch in range(args.epochs):
             model.train() 
             total_loss = 0

@@ -91,28 +91,6 @@ class ConvEncoder(nn.Module):
         x = self.encoder(x)
         return x
 
-class ConvEncoder_small(nn.Module):
-    def __init__(self, d_model):
-        super().__init__()
-        self.encoder = nn.Sequential(
-            Conv3d_res(3, 64, kernel_size=7, stride=(1, 2, 2), padding=2),  # 48, 48
-
-            Conv3d_res(64, 128, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)), # 24, 24
-            Conv3d_res(128, 128, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True),
-
-            Conv3d_res(128, 256, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)), # 12, 12
-            Conv3d_res(256, 256, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True),
-
-            Conv3d_res(256, 512, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)), # 6, 6
-            Conv3d_res(512, 512, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True),
-
-            Conv3d_res(512, d_model, kernel_size=(1, 3, 3), stride=1, padding=(0, 0, 0)),
-            )
-    
-    
-    def forward(self, x):
-        x = self.encoder(x)
-        return x
     
 class Speaking_conv3d_layers(nn.Module):
     def __init__(self, d_model, length_of_video_in_frames):
@@ -143,7 +121,7 @@ class Speaking_words(nn.Module):
         self.linear_size = length_of_video_in_frames 
         self.d_model = d_model
         self.tokenizer_vocab = tokenizer_vocab
-        self.conv1 = Conv3d_res(3, 64, kernel_size=7, stride=(1, 2, 2), padding=2)  # 80, 80
+        self.conv1 = Conv3d_res(3, 64, kernel_size=5, stride=(1, 2, 2), padding=2)  # 80, 80
         self.conv2 = Conv3d_res(64, 128, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)) # 40, 40
         self.conv3 = Conv3d_res(128, 128, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True)
         self.conv4 = Conv3d_res(128, 256, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)) # 20, 20
