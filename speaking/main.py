@@ -81,7 +81,9 @@ def main(args):
     else:
         criterion = nn.CrossEntropyLoss()
 
-    train_dataset = LipReadingDataset(directory='./LRS2/data_splits/train' if os.getlogin() != "darke" else "D:/classes/project/LRS2/data_splits/train",
+    base_path = "D:/classes/project/data/" if args.useCloud != True else  "/home/jupyter/"
+
+    train_dataset = LipReadingDataset(directory=base_path + "LRS2/data_splits/train",
                                 transform=None,
                                 length_video=length_video,
                                 mode="word",
@@ -203,10 +205,10 @@ if __name__ == "__main__":
     parser.add_argument('--resume', default=False, type=bool, help='resume training')
     parser.add_argument('--useWords', default=True, type=bool, help='train on words')
     parser.add_argument('--compile', default=False, type=bool, help='compile model')
+    parser.add_argument('--useCloud', default=False, type=bool, help='Cloud compute')
+
 
     parser.add_argument('--bestSpeakWeightsPath', default="weights_trimed.state", type=str, help='train on words')
-
-
 
 
     
