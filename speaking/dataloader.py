@@ -38,9 +38,10 @@ def get_file_data(F):
                 continue
             yield  line.split(" ")
 
-def get_frames(length_video, video_path, transform):
+def get_frames(length_video, video_path, transform, h_w):
     reader = torchvision.io.read_video(video_path, pts_unit = 'sec', output_format='TCHW')
     c,h,w = reader[0].shape[1:]
+    h, w = h_w
     frames = torch.zeros((length_video, c, h, w), dtype=torch.float32)
     # frames_path, label = self.samples[0]
     for i, frame in enumerate(reader[0]):
@@ -51,20 +52,21 @@ def get_frames(length_video, video_path, transform):
     return frames, reader[-1]["video_fps"]
 
 class LipReadingDataset(Dataset):
-    def __init__(self, directory, transform=None, resolution=0.5, length_video=200, mode="word", tokenizer=None):
+    def __init__(self, directory, transform=None, resolution=0.5, length_video=200, mode="word", tokenizer=None, h_w = (96,96)):
         """
         Args:
             directory (string): Directory with all the video folders.
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.directory = directory
-        transform = [t.ToPILImage(), t.ToTensor()]  # 90x90
+        transform = [t.Resize(h_w), t.ToPILImage(), t.ToTensor()]  # 90x90
         self.transform  = t.Compose(transform)
         self.samples = load_samples(directory)
         self.resolution = resolution
         self.length_video = length_video
         self.mode = mode
         self.tokenizer = tokenizer
+        self.h_w = h_w
         if mode not in ["speak", "word"]:
             raise NotImplementedError( f"{self.mode} was enterered as mode in dataloader.  this is not supported")
        
@@ -72,8 +74,8 @@ class LipReadingDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        video_path, label = self.samples[idx]
-        frames, frame_rate = get_frames(self.length_video, video_path, self.transform)
+        video_path, label = self.samples[0]
+        frames, frame_rate = get_frames(self.length_video, video_path, self.transform, self.h_w )
         labels_np = torch.zeros((self.length_video)) if self.mode != "word" else torch.ones((self.length_video)) 
         labels_np = self.get_labels(label, labels_np,  frame_rate)
         return frames, labels_np, video_path

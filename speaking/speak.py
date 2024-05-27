@@ -116,7 +116,7 @@ class Speaking_conv3d_layers(nn.Module):
         return x
 
 class Speaking_words(nn.Module):
-    def __init__(self, d_model, length_of_video_in_frames, tokenizer_vocab):
+    def __init__(self, d_model, length_of_video_in_frames, tokenizer_vocab, resized=True):
         super().__init__()
         self.linear_size = length_of_video_in_frames 
         self.d_model = d_model
@@ -132,8 +132,10 @@ class Speaking_words(nn.Module):
         self.conv9 = Conv3d_res(d_model, 128, kernel_size=(1, 3, 3), stride=1, padding=(0, 0, 0)) # 6, 6
 
     
-        
-        self.linear = nn.Linear(128*6*6*length_of_video_in_frames, 128)
+        if resized:
+            self.linear = nn.Linear(128*2*2*length_of_video_in_frames, 128)
+        else:
+            self.linear = nn.Linear(128*6*6*length_of_video_in_frames, 128)
         self.gelu = nn.GELU()
         self.linear2 = nn.Linear(128, tokenizer_vocab*length_of_video_in_frames) # output size is 1 or zero times the temporal dimension
 
@@ -146,7 +148,7 @@ class Speaking_words(nn.Module):
         x, res6 = self.conv6(x)
         x, res7 = self.conv7(x)
         x, res8 = self.conv8(x)
-        x, res8 = self.conv9(x)
+        x, res9 = self.conv9(x)
 
 
         x = x.view((x.shape[0], -1))
