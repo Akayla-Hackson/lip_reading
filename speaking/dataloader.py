@@ -74,7 +74,7 @@ class LipReadingDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        video_path, label = self.samples[0]
+        video_path, label = self.samples[idx]
         frames, frame_rate = get_frames(self.length_video, video_path, self.transform, self.h_w )
         labels_np = torch.zeros((self.length_video)) if self.mode != "word" else torch.ones((self.length_video)) 
         labels_np = self.get_labels(label, labels_np,  frame_rate)
