@@ -1,3 +1,4 @@
+from math import isnan
 from torch.utils.data import DataLoader
 from dataloader import LipReadingDataset
 from speak import Speaking_conv3d_layers, Speaking_words
@@ -117,7 +118,7 @@ def main(args):
         writer = SummaryWriter(f'runs_speak/{"words_" if args.useWords else ""}{save_path}')
         optimizer = torch.optim.AdamW(model.parameters() if args.useWords != True  else params, betas=(0.99, 0.95), lr=args.learning_rate)
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
-        scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps))
+        scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=350, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps))
   # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
 
         if args.resume:
@@ -143,12 +144,15 @@ def main(args):
                 output = model(frames)
 
                 loss = criterion(output, label) 
+                if torch.isnan(loss):
+                    loss = torch.nan_to_num(loss)
                 loss_accum += loss
                 loss = loss.detach()
                 total_loss += loss
                 avg_loss += loss
 
                 if batch_idx != 0 and batch_idx % args.grad_accum_steps == 0:
+                    # print(f"stepping....  loss: {loss_accum.detach().cpu}")
                     optimizer.zero_grad()
                     loss_accum.backward()
                     del loss_accum
