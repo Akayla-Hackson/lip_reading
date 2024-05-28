@@ -1,0 +1,10 @@
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/lrs2_v1_partaa -o 'lrs2_v1_partaa' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/lrs2_v1_partab -o 'lrs2_v1_partab' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/lrs2_v1_partac -o 'lrs2_v1_partac' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/lrs2_v1_partad -o 'lrs2_v1_partad' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/lrs2_v1_partae -o 'lrs2_v1_partae' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/pretrain.txt -o 'pretrain.txt' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/train.txt -o 'train.txt' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/val.txt -o 'val.txt' 
+curl -u 'lrs963:sD4AVd9U' https://thor.robots.ox.ac.uk/~vgg/data/lip_reading/data2/test.txt -o 'test.txt' 
+

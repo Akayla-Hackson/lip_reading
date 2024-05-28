@@ -22,7 +22,6 @@ import numpy as np
 import random
 from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
-from jiwer import wer
 
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
@@ -196,7 +195,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
-    # 3e-4 
+    # 3e-4  
     parser.add_argument('--epochs', default=1, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)
