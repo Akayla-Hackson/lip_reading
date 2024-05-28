@@ -39,8 +39,7 @@ random.seed(RANDOM_SEED)
 # Pad each sequence to be the same length within the batch
 def collate_fn(batch):
     sequences, labels = zip(*batch)
-    encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
-    
+    encoded_labels = tokenizer(labels, add_special_tokens=False, max_length=100, padding="longest",  return_tensors='pt')
     return torch.unsqueeze(torch.stack(sequences[0]), axis=0), encoded_labels
 # def collate_fn(batch):
 #     sequences, labels = zip(*batch)
@@ -112,7 +111,7 @@ def main(args):
                 if batch_idx != 0 and batch_idx % args.grad_accum_steps == 0:
                     optimizer.zero_grad()
                     loss_accum.backward()
-                    plot_grad_flow(model.named_parameters())
+                    # plot_grad_flow(model.named_parameters())
                     del loss_accum
                     nn.utils.clip_grad_norm_(model.parameters(), 1, error_if_nonfinite=True)
                     loss_accum = 0
@@ -254,6 +253,25 @@ def plot_grad_flow(named_parameters):
 #                 Line2D([0], [0], color="b", lw=4),
 #                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
 #     plt.show() 
+def levenshtein(a, b):
+  """Calculates the Levenshtein distance between a and b.
+  The code was taken from: http://hetland.org/coding/python/levenshtein.py
+  """
+  n, m = len(a), len(b)
+  if n > m:
+    # Make sure n <= m, to use O(min(n,m)) space
+    a, b = b, a
+    n, m = m, n
+  current = list(range(n + 1))
+  for i in range(1, m + 1):
+    previous, current = current, [i] + [0] * n
+    for j in range(1, n + 1):
+      add, delete = previous[j] + 1, current[j - 1] + 1
+      change = previous[j - 1]
+      if a[j - 1] != b[i - 1]:
+        change = change + 1
+      current[j] = min(add, delete, change)
+  return current[n]
 if __name__ == "__main__":
     # device = 'cpu'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
