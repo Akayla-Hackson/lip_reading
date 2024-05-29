@@ -67,8 +67,25 @@ def collate_fn(batch):
     # sequences, labels = zip(*batch)
     # print(batch)
     # return torch.stack(sequences[0]), labels
+def save_model(model, optimizer, args, config, filepath):
+    save_info = {
+        'model': model.state_dict(),
+        'optim': optimizer.state_dict(),
+        'args': args,
+        'model_config': config,
+        'system_rng': random.getstate(),
+        'numpy_rng': np.random.get_state(),
+        'torch_rng': torch.random.get_rng_state(),
+    }
+
+    torch.save(save_info, filepath)
+    print(f"save the model to {filepath}")
+
 
 def main(args):
+    # print("Pytorch version：")
+    # print(torch.__version__)
+
     model = LipReadingModel()
     model.to(device)
     criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
@@ -87,9 +104,9 @@ def main(args):
             num_workers=args.num_workers,
             pin_memory=False,
     )
-
+    best_wer = 1.0
     predictions, gt = [], []
-    def predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy'):
+    def predict(logits, y, lengths, y_lengths, n_show=1, mode='greedy'):
         print ('---------------------------')
         
         n = min(n_show, logits.size(1))
@@ -134,7 +151,7 @@ def main(args):
             logits.backward(dlogits)
             
             optimizer.step()
-            print("logits shape", logits.shape)
+            # print("logits shape", logits.shape)
             # print("input length:", lengths)
             predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy')
         
@@ -142,6 +159,15 @@ def main(args):
                 print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
         wer_result = decoder.wer_batch(predictions, gt)
         print("WER:", wer_result)
+        if wer_result < best_wer:
+            best_wer = wer_result
+            state = {
+                'epoch': epoch,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                }
+            torch.save(state, f"{epoch}.state")
+        
 
 if __name__ == "__main__":
    
@@ -153,7 +179,7 @@ if __name__ == "__main__":
         device = torch.device('cpu')
        
     print(device)
-
+    
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
