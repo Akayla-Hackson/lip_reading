@@ -147,11 +147,11 @@ if __name__ == "__main__":
    
     if torch.cuda.is_available():
         device = torch.device('cuda')
-    elif torch.backends.mps.is_available():      
-        device = 'mps'                         
+    # elif torch.backends.mps.is_available():      
+    #     device = 'mps'                         
     else:
         device = torch.device('cpu')
-    device = torch.device('cpu')    
+       
     print(device)
 
     parser = argparse.ArgumentParser()
