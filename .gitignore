@@ -21,3 +21,4 @@ runs
 10
 saved_weights
 runs_speak
+*.json
