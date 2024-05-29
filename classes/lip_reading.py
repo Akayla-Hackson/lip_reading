@@ -6,35 +6,29 @@ from classes.transformer import Transformer
 import torch.nn.functional as F
 import torch
 
+# Define the characters set
+characters = list("abcdefghijklmnopqrstuvwxyz ")
+characters.append('-')  # CTC blank token
+
 class LipReadingModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.cnn = CNN()
-        self.lstm = LSTM(input_dim=512, hidden_dim=256, num_layers=1)  
-        self.transformer = Transformer(feature_size=256, num_tokens=30522, num_heads=8, num_layers=6)
+        self.conv3d = nn.Conv3d(in_channels=3, out_channels=64, kernel_size=(3, 5, 5), padding=(1, 2, 2))
+        self.relu = nn.ReLU()
+        self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
+        self.lstm = nn.LSTM(input_size=64 * 48 * 48, hidden_size=256, num_layers=2, batch_first=True, bidirectional=True)
+        self.fc = nn.Linear(512, len(characters))
 
-    def forward(self, x, tgt, mask, train):
+    def forward(self, x):
+        # print("Input shape:", x.shape)
         batch_size, seq_len, c, h, w = x.shape
-        x = x.view(batch_size * seq_len, c, h, w)
-
-        cnn_out = self.cnn(x)    # Expected shape: (batch_size, updated num channels, updated height, updated width)
-        cnn_out = cnn_out.view(batch_size, seq_len, -1) 
-
-        lstm_out, _ = self.lstm(cnn_out)   # Expected shape: (batch_size, sequence_length (num_frames), features)
-        lstm_out = lstm_out.transpose(0, 1)   # Expected shape: (sequence_length (num_frames), batch_size, features)
-
-        output = self.transformer(lstm_out, tgt, train=train)   # Expected shape: (target_sequence_length, batch_size, vocab_size)
-        output = output.permute(1, 2, 0)
-        
-        return output
-
-
-        # lstm_out = lstm_out.reshape(batch_size * 100 , -1)
-        # # print("transposed LSTM OUT:", lstm_out.shape)
-
-        # output = self.transformer(lstm_out.type(torch.int))   # Expected shape: (target_sequence_length, batch_size, vocab_size)
-        # # print("transformer output:", output.shape)
-        # # output = output.permute(1, 2, 0)     # Expected shape: (batch_size, vocab_size, target_sequence_length)  <-- needed for cross entropy loss
-        # # output = torch.argmax(output["logits"], dim=-1)
-        # output = output["logits"].view(batch_size, 100, -1)
-        # output = output.permute(0, 2, 1)
+        x = x.permute(0, 2, 1, 3, 4) # (batch, channels, time, height, width)
+        x = self.pool(self.relu(self.conv3d(x)))
+        # print("After Conv3d and Pooling shape:", x.shape)
+        x = x.permute(0, 2, 1, 3, 4).contiguous()  # (batch, time, channels, height, width)
+        # print("After Permute shape:", x.shape)
+        x = x.view(x.size(0), x.size(1), -1)  # (batch, time, features)
+        # print("After View shape:", x.shape)
+        x, _ = self.lstm(x)
+        x = self.fc(x)
+        return x
