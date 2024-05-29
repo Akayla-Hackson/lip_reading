@@ -57,6 +57,7 @@ def validate(loader, model, criterion, writer=None, total_len=0, idx=0, isWrite=
     if writer:
         writer.add_scalar('Val Accuracy', total_correct/total_words, total_len + idx)
         writer.add_scalar('loss Accuracy', loss, total_len + idx)
+    return total_correct/total_words
 
 
 
@@ -89,13 +90,13 @@ def main(args):
 
     base_path = "D:/classes/project/" if args.useCloud != True else  "/home/jupyter/data/"
 
-    train_dataset = LipReadingDataset(directory=base_path + "LRS2/data_splits/train",
+    train_dataset = LipReadingDataset(directory=base_path + "LRS2/data_splits/pretrain",
                                 transform=None,
                                 length_video=length_video,
                                 mode="word",
                                 tokenizer=tokenizer)
     print("Total samples loaded:", len(train_dataset))  
-    train_set, val_set = torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.9), len(train_dataset) - int(len(train_dataset)*0.9)])
+    train_set, val_set = torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.85), len(train_dataset) - int(len(train_dataset)*0.85)])
 
     train_data_loader = DataLoader(
         train_set,
@@ -103,6 +104,8 @@ def main(args):
         shuffle=True,
         num_workers=args.num_workers,
         pin_memory=False,
+        prefetch_factor=2
+        
         )
 
     val_data_loader = DataLoader(
@@ -111,18 +114,19 @@ def main(args):
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=False,
+        prefetch_factor=2,
         )
     print("Total samples train:", len(train_data_loader))  
     print("Total samples val:", len(val_data_loader))  
 
 
     if args.train:
-        save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
+        save_path = f'{args.data_type}/4_worker_Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
         os.makedirs(save_path, exist_ok=True)
         writer = SummaryWriter(f'runs_speak/{"words_" if args.useWords else ""}{save_path}')
         optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
-        scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=20, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps))
+        scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_data_loader)/args.grad_accum_steps))
   # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
 
         if args.resume:
@@ -135,6 +139,7 @@ def main(args):
         if args.compile:
             print("Compiling....")
             model = torch.compile(model,)
+        best_acc = 0
  
         for epoch in range(args.epochs):
             model.train() 
@@ -183,9 +188,17 @@ def main(args):
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
                 }
-            torch.save(state, f"{epoch}.state")
+            torch.save(state, "epoch.state")
             model.eval()
-            validate(val_data_loader, model, criterion, writer, epoch * len(train_data_loader), batch_idx)
+            acc = validate(val_data_loader, model, criterion, writer, epoch * len(train_data_loader), batch_idx)
+            if acc > best_acc:
+                best_acc = acc
+                state = {
+                'epoch': epoch,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                }
+                torch.save(state, "acc.state")
 
     else:
         model.load_state_dict(torch.load(args.bestSpeakWeightsPath)['state_dict'])
@@ -204,19 +217,19 @@ if __name__ == "__main__":
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
     parser.add_argument('--batch_size', default=1, type=int, help='num entries per batch')
-    parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
+    parser.add_argument('--grad_accum_steps', default=48, type=int, help='How many steps to acumulate grad')
     parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
 
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
-    parser.add_argument('--learning_rate', default=1e-3, type=int, help='learning rate for optimizer')
+    parser.add_argument('--learning_rate', default=5e-5, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=12, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=20, type=int, help='num epoch to train for')
     parser.add_argument('--resume', default=False, type=bool, help='resume training')
     parser.add_argument('--useWords', default=True, type=bool, help='train on words')
     parser.add_argument('--compile', default=False, type=bool, help='compile model')
-    parser.add_argument('--useCloud', default=False, type=bool, help='Cloud compute')
+    parser.add_argument('--useCloud', default=True, type=bool, help='Cloud compute')
 
 
     parser.add_argument('--bestSpeakWeightsPath', default="weights_trimed.state", type=str, help='train on words')
