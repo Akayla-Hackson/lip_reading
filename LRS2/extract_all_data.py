@@ -2,10 +2,8 @@ import os
 import tarfile
 import shutil
 import cv2
-<<<<<<< HEAD
 import re 
-=======
->>>>>>> main
+
 
 def concatenate_parts(output_dir, base_filename, parts):
     full_tar_path = os.path.join(output_dir, base_filename + '.tar')
@@ -80,12 +78,12 @@ def lrw_move_files_based_on_txt(extracted_directory, dataset_names, data_splits_
             dataset_dir_path = os.path.join(word_dir_path, dataset)
             for sample in os.listdir(dataset_dir_path):
                 video_id = os.path.splitext(sample)[0]
-                sampel_path = os.path.join(dataset_dir_path, sample)
+                sample_path = os.path.join(dataset_dir_path, sample)
                 new_folder_path = os.path.join(data_splits_dir, dataset, video_id)
                 if not os.path.exists(new_folder_path):
                         os.makedirs(new_folder_path)
 
-                shutil.move(sampel_path, new_folder_path)
+                shutil.copy(sample_path, new_folder_path)
                 
                 print(f"Moved {video_id}.mp4 and {video_id}.txt to {new_folder_path}")
 
@@ -138,7 +136,8 @@ dataset_names = ['train', 'val', 'test']
 base_filename = 'lrw-v1-partaa'
 parts = ['lrw-v1-partaa']
 extracted_directory = './LRS2/extracted_data/mvlrs_v1'
-data_splits_dir = './LRS2/data_splits'
+# data_splits_dir = './LRS2/data_splits'
+data_splits_dir = './LRS2/data_splits_lrw'
 root_path = './LRS2/'
 
 # tar_file_path = './LRS2/lrs2_v1.tar' 

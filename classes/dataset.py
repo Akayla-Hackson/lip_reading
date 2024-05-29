@@ -27,6 +27,9 @@ class LipReadingDataset(Dataset):
         split_name = os.path.basename(self.directory)
         for video_folder in video_folders:
             video_path = os.path.join(self.directory, video_folder)
+            if not os.path.isdir(video_path):
+                continue
+            # print(video_path)
             sub_folders = sorted(os.listdir(video_path))
 
             for sub_folder in sub_folders:
@@ -51,8 +54,8 @@ class LipReadingDataset(Dataset):
                 
 
             # if os.getlogin() == "darke" and len(samples) > 1000:
-            # if len(samples) > 100:
-            #     break
+            if len(samples) > 100:
+                break
 
         return samples
 
@@ -76,6 +79,6 @@ class LipReadingDataset(Dataset):
             if "Text:" in line:
                 parts = line.split("Text:")
                 if len(parts) > 1:
-                    phrase = parts[1]. strip()
+                    phrase = parts[1].strip()
                     break 
         return phrase
