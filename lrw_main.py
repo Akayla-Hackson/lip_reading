@@ -28,12 +28,6 @@ from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 from classes.ctc_decoder import Decoder
 
-# Define the characters set
-characters = list("abcdefghijklmnopqrstuvwxyz ")
-characters.append('-')  # CTC blank token
-vocab = []
-for char in characters: vocab.append(char)
-
 def collate_fn(batch):
     xs, ys, lens, indices = zip(*batch)
     max_len = max(lens)
@@ -77,10 +71,12 @@ def collate_fn(batch):
 def main(args):
     model = LipReadingModel()
     model.to(device)
-    criterion = nn.CTCLoss(blank=len(characters) - 1, reduction='none', zero_infinity=True)
+    criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     train_dataset = LRWDataset(directory='./LRW/data_splits/train')
+    vocab = train_dataset.vocab
+    print ('vocab = {}'.format('|'.join(train_dataset.vocab)))  
     print("Total samples loaded:", len(train_dataset))  
     decoder = Decoder(vocab)
     train_loader = DataLoader(
@@ -125,8 +121,7 @@ def main(args):
             x, y = x.to(device), y.to(device)
             logits = model(x)
             logits = logits.transpose(0, 1)
-            # print("logits shape", logits.shape)
-            # print("input length:", lengths)
+            
             loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             loss = loss_all.mean()
             if torch.isnan(loss).any():
@@ -139,7 +134,8 @@ def main(args):
             logits.backward(dlogits)
             
             optimizer.step()
-
+            print("logits shape", logits.shape)
+            # print("input length:", lengths)
             predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy')
         
             if i % 10 == 0:

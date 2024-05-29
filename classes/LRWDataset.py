@@ -9,7 +9,7 @@ from PIL import Image
 
 # Define the characters set
 characters = list("abcdefghijklmnopqrstuvwxyz ")
-characters.append('-')  # CTC blank token
+# characters.append('-')  # CTC blank token
 char_to_index = {char: idx for idx, char in enumerate(characters)}
 
 class LRWDataset(Dataset):
@@ -20,7 +20,21 @@ class LRWDataset(Dataset):
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
+        self.vocab_unordered = {}
+        self.vocab_unordered[' '] = True
+        for char in characters:
+            self.vocab_unordered[char] = True
+
         self.samples = self._load_samples()
+        self.vocab = []
+        for char in self.vocab_unordered: self.vocab.append(char)
+        self.vocab.sort()
+        # invert ordered to create the char->int mapping
+        # key: 1..N (reserve 0 for blank symbol)
+        self.vocab_mapping = {}
+        for i, char in enumerate(self.vocab):
+            self.vocab_mapping[char] = i + 1
+           
 
     def _load_samples(self):
         samples = []
@@ -29,6 +43,9 @@ class LRWDataset(Dataset):
         for video_folder in video_folders:
             label = os.path.splitext(video_folder)[0]
             label = ''.join(re.findall(r'[A-Za-z]', label))
+            # build vocabulary
+            for char in label.lower(): self.vocab_unordered[char] = True
+
             video_path = os.path.join(self.directory, video_folder)
             if not os.path.isdir(video_path):
                 continue
@@ -54,8 +71,12 @@ class LRWDataset(Dataset):
         frames = [self.transform(Image.open(frame)) for frame in frames_path]
         length = len(frames)
         frames = torch.stack(frames)
-        
-        label = torch.tensor([char_to_index[char] for char in label.lower()], dtype=torch.long)
+
+        y = []
+        # allow whitespaces to be predicted
+        for char in label.lower(): y.append(self.vocab_mapping[char])
+
+        # label = torch.tensor([char_to_index[char] for char in label.lower()], dtype=torch.long)
         # return {'video': frames, 'label': label}
         
-        return frames, label, length, idx
+        return frames, y, length, idx
