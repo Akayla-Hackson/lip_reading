@@ -1,4 +1,5 @@
 import torch
+from classes.ctc_decoder import Decoder
 from torchvision import transforms
 import torch.optim as optim
 from PIL import Image
@@ -26,7 +27,7 @@ from jiwer import wer
 from classes.LRWDataset import LRWDataset
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
-from classes.ctc_decoder import Decoder
+
 
 def collate_fn(batch):
     xs, ys, lens, indices = zip(*batch)
@@ -83,18 +84,16 @@ def save_model(model, optimizer, args, config, filepath):
 
 
 def main(args):
-    # print("Pytorch version：")
-    # print(torch.__version__)
-
-    model = LipReadingModel()
-    model.to(device)
-    criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
     train_dataset = LRWDataset(directory='./LRW/data_splits/train')
     vocab = train_dataset.vocab
     print ('vocab = {}'.format('|'.join(train_dataset.vocab)))  
     print("Total samples loaded:", len(train_dataset))  
+
+    model = LipReadingModel(vocab)
+    model.to(device)
+    criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+
     decoder = Decoder(vocab)
     train_loader = DataLoader(
             train_dataset,
@@ -106,7 +105,7 @@ def main(args):
     )
     best_wer = 1.0
     predictions, gt = [], []
-    def predict(logits, y, lengths, y_lengths, n_show=1, mode='greedy'):
+    def predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy'):
         print ('---------------------------')
         
         n = min(n_show, logits.size(1))
@@ -149,11 +148,11 @@ def main(args):
             dlogits = torch.autograd.grad(loss_all, logits, grad_outputs=weight)[0]
             
             logits.backward(dlogits)
-            
             optimizer.step()
+            # [29, 16, 28]
             # print("logits shape", logits.shape)
             # print("input length:", lengths)
-            predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy')
+            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
         
             if i % 10 == 0:
                 print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")

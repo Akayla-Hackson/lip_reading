@@ -6,18 +6,17 @@ from classes.transformer import Transformer
 import torch.nn.functional as F
 import torch
 
-# Define the characters set
-characters = list("abcdefghijklmnopqrstuvwxyz ")
-characters.append('-')  # CTC blank token
 
 class LipReadingModel(nn.Module):
-    def __init__(self):
+    def __init__(self, vocab):
         super().__init__()
+        self.vocab = vocab
         self.conv3d = nn.Conv3d(in_channels=3, out_channels=64, kernel_size=(3, 5, 5), padding=(1, 2, 2))
         self.relu = nn.ReLU()
         self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
         self.lstm = nn.LSTM(input_size=64 * 48 * 48, hidden_size=256, num_layers=2, batch_first=True, bidirectional=True)
-        self.fc = nn.Linear(512, len(characters))
+        self.fc = nn.Linear(512, len(self.vocab))
+        
 
     def forward(self, x):
         # print("Input shape:", x.shape)

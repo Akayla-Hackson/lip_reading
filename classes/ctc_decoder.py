@@ -1,14 +1,15 @@
-# from torchaudio.models.decoder import CTCDecoderLM, CTCDecoderLMState
-import torch.nn.functional as F
 import torch
+from ctcdecode import CTCBeamDecoder
+import torch.nn.functional as F
 import numpy as np
 import editdistance
-
 
 class Decoder:
     def __init__(self, labels, lm_path=None, alpha=1, beta=1.5, cutoff_top_n=40, cutoff_prob=0.99, beam_width=200, num_processes=24, blank_id=0):
         self.vocab_list = ['_'] + labels # NOTE: blank symbol
-        # self._decoder = CTCBeamDecoder(['_@'] + labels[1:], lm_path, alpha, beta, cutoff_top_n, cutoff_prob, beam_width, num_processes, blank_id)
+        self._decoder = CTCBeamDecoder(['_@'] + labels[1:], 
+        lm_path, alpha, beta, cutoff_top_n, cutoff_prob, 
+        beam_width, num_processes, blank_id)
         # NOTE: the whitespace symbol is replaced with an @ symbol for explicit modeling in char-based LMs
 
     def convert_to_string(self, tokens, seq_len=None):
@@ -26,6 +27,7 @@ class Decoder:
     
     def decode_beam(self, logits, seq_lens):
         decoded = []
+        
         tlogits = logits.transpose(0, 1)
         beam_result, beam_scores, timesteps, out_seq_len = self._decoder.decode(tlogits.softmax(-1), seq_lens)
         for i in range(tlogits.size(0)):
@@ -35,6 +37,7 @@ class Decoder:
 
     def decode_greedy(self, logits, seq_lens):
         decoded = []
+        # tlogits = logits
         tlogits = logits.transpose(0, 1)
         _, tokens = torch.max(tlogits, 2)
         for i in range(tlogits.size(0)):
