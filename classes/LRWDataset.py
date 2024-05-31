@@ -57,7 +57,7 @@ class LRWDataset(Dataset):
                 if os.path.exists(frames_dir):
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
                     samples.append((frames, label))
-            if len(samples) > 100:
+            if len(samples) > 1000:
                 break        
         return samples            
 

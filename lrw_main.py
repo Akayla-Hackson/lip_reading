@@ -130,11 +130,12 @@ def train_lrw(args):
             optimizer.zero_grad()
             x, y, lengths, y_lengths, idx = batch
 
-            x, y = x.to(device), y.to(device)
+            x, y, lengths, y_lengths = x.to(device), y.to(device), lengths.to(device), y_lengths.to(device)
             logits = model(x)
             logits = logits.transpose(0, 1)
             
-            loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
+            with torch.backends.cudnn.flags(enabled=False):
++                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             loss = loss_all.mean()
             if torch.isnan(loss).any():
                 print ('Skipping iteration with NaN loss')
@@ -223,7 +224,8 @@ def test_lrw(args):
             logits = model(x)
             logits = logits.transpose(0, 1)
             
-            loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
+            with torch.backends.cudnn.flags(enabled=False):
++                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             loss = loss_all.mean()
             if torch.isnan(loss).any():
                 print ('Skipping iteration with NaN loss')
@@ -255,7 +257,7 @@ if __name__ == "__main__":
     parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
 
-    parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
+    parser.add_argument('--num_workers', default=1, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--lr', default=1e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
