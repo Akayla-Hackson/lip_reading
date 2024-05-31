@@ -68,22 +68,18 @@ def collate_fn(batch):
     # sequences, labels = zip(*batch)
     # print(batch)
     # return torch.stack(sequences[0]), labels
-def save_model(model, optimizer, args, config, filepath):
+def save_model(model, optimizer, args, filepath):
     save_info = {
         'model': model.state_dict(),
         'optim': optimizer.state_dict(),
         'args': args,
-        'model_config': config,
-        'system_rng': random.getstate(),
-        'numpy_rng': np.random.get_state(),
-        'torch_rng': torch.random.get_rng_state(),
     }
 
     torch.save(save_info, filepath)
     print(f"save the model to {filepath}")
 
 
-def main(args):
+def train_lrw(args):
     train_dataset = LRWDataset(directory='./LRW/data_splits/train')
     vocab = train_dataset.vocab
     print ('vocab = {}'.format('|'.join(train_dataset.vocab)))  
@@ -92,7 +88,7 @@ def main(args):
     model = LipReadingModel(vocab)
     model.to(device)
     criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     decoder = Decoder(vocab)
     train_loader = DataLoader(
@@ -152,20 +148,92 @@ def main(args):
             # [29, 16, 28]
             # print("logits shape", logits.shape)
             # print("input length:", lengths)
-            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+            predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy')
         
-            if i % 10 == 0:
-                print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
+            # if i % 10 == 0:
+            #     print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
+        print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
         wer_result = decoder.wer_batch(predictions, gt)
         print("WER:", wer_result)
         if wer_result < best_wer:
             best_wer = wer_result
-            state = {
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                }
-            torch.save(state, f"{epoch}.state")
+            save_model(model, optimizer, args, args.filepath)
+            # state = {
+            #     'epoch': epoch,
+            #     'state_dict': model.state_dict(),
+            #     'optimizer': optimizer.state_dict(),
+            #     }
+            # torch.save(state, f"{epoch}.state")
+
+def test_lrw(args):
+    model.eval()
+    with torch.no_grad():
+        
+        train_dataset = LRWDataset(directory='./LRW/data_splits/val')
+        vocab = train_dataset.vocab
+    
+        print("Total samples loaded:", len(train_dataset))  
+
+        model = LipReadingModel(vocab)
+        saved = torch.load(args.filepath)
+        model.load_state_dict(saved['model'])
+        model.to(device)
+        print(f"Loaded model to test from {args.filepath}")
+
+        criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
+
+        decoder = Decoder(vocab)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=args.num_workers,
+            pin_memory=False,
+        )
+        best_wer = 1.0
+        predictions, gt = [], []
+        def predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy'):
+            print ('---------------------------')
+        
+            n = min(n_show, logits.size(1))
+        
+            if mode == 'greedy':
+                decoded = decoder.decode_greedy(logits, lengths)
+            elif mode == 'beam':
+                decoded = decoder.decode_beam(logits, lengths)
+
+            predictions.extend(decoded)
+
+            cursor = 0
+            for b in range(x.size(0)):
+                y_str = ''.join([vocab[ch - 1] for ch in y[cursor: cursor + y_lengths[b]]])
+                gt.append(y_str)
+                cursor += y_lengths[b]
+                if b < n:
+                    print ('Test seq {}: {}; pred_{}: {}'.format(b + 1, y_str, mode, decoded[b]))
+
+            print ('---------------------------')
+
+        progress_bar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
+        for i, batch in progress_bar:
+            x, y, lengths, y_lengths, idx = batch
+
+            x, y = x.to(device), y.to(device)
+            logits = model(x)
+            logits = logits.transpose(0, 1)
+            
+            loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
+            loss = loss_all.mean()
+            if torch.isnan(loss).any():
+                print ('Skipping iteration with NaN loss')
+                continue
+
+            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+        
+        print(f"test loss: {loss.item():.4f}")
+        wer_result = decoder.wer_batch(predictions, gt)
+        print("WER:", wer_result)
         
 
 if __name__ == "__main__":
@@ -184,13 +252,17 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
     parser.add_argument('--batch_size', default=16, type=int, help='num entries per batch')
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
-    parser.add_argument('--train', default=False, type=bool, help='Train or eval')
+    parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
 
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
-    parser.add_argument('--learning_rate', default=1e-4, type=int, help='learning rate for optimizer')
+    parser.add_argument('--lr', default=1e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
     parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
     args = parser.parse_args()
-    main(args)
+    args.filepath = f'{args.epochs}-{args.lr}-lrw.pt' # Save path.
+    if args.train:
+        train_lrw(args)
+    else:    
+        test_lrw(args)
