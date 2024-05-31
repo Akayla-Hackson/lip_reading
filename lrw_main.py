@@ -135,7 +135,7 @@ def train_lrw(args):
             logits = logits.transpose(0, 1)
             
             with torch.backends.cudnn.flags(enabled=False):
-+                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
+                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             loss = loss_all.mean()
             if torch.isnan(loss).any():
                 print ('Skipping iteration with NaN loss')
@@ -225,7 +225,7 @@ def test_lrw(args):
             logits = logits.transpose(0, 1)
             
             with torch.backends.cudnn.flags(enabled=False):
-+                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
+                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             loss = loss_all.mean()
             if torch.isnan(loss).any():
                 print ('Skipping iteration with NaN loss')
