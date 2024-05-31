@@ -158,13 +158,13 @@ def train_lrw(args):
         print("WER:", wer_result)
         if wer_result < best_wer:
             best_wer = wer_result
-            save_model(model, optimizer, args, args.filepath)
-            # state = {
-            #     'epoch': epoch,
-            #     'state_dict': model.state_dict(),
-            #     'optimizer': optimizer.state_dict(),
-            #     }
-            # torch.save(state, f"{epoch}.state")
+            # save_model(model, optimizer, args, args.filepath)
+            state = {
+                'epoch': epoch,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                }
+            torch.save(state, f"{epoch}.state")
 
 def test_lrw(args):
     model.eval()
@@ -259,7 +259,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--num_workers', default=1, type=int, help='num of workes for the dataloader')
 
-    parser.add_argument('--lr', default=1e-4, type=int, help='learning rate for optimizer')
+    parser.add_argument('--lr', default=3e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
     parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
     args = parser.parse_args()
