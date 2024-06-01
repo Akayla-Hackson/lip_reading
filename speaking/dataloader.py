@@ -27,6 +27,24 @@ def load_samples(directory):
                 samples.append((video_dir, label_file))
     return samples
 
+def load_samples_OriginalDataStructure(base_directory, dataset_name):
+    samples = []
+    train_file = base_directory + dataset_name
+    if dataset_name == "pretrain":
+        video_directory = f"{base_directory}/pretrain/"
+    else:
+        video_directory = f"{base_directory}/main/"
+    with open(f"{train_file}.txt", "r") as F:
+        lines = F.read()
+        lines = lines.splitlines()
+
+    for line in lines:
+        video_dir = os.path.join(video_directory, line + '.mp4')
+        label_file = os.path.join(video_directory, line + '.txt')
+        samples.append((video_dir, label_file))
+    return samples
+
+
 def get_file_data(F):
         lines = F.read()
         lines = lines.splitlines()
@@ -36,7 +54,14 @@ def get_file_data(F):
                 if line == "WORD START END ASDSCORE":
                     is_start_line = True
                 continue
-            yield  line.split(" ")
+            yield  line.split("")
+
+
+def get_file_data_sentence(F):
+        lines = F.read()
+        lines = lines.splitlines()
+        words = lines[0].split("Text:")[-1]
+        return  words
 
 def get_frames(length_video, video_path, transform, h_w):
     reader = torchvision.io.read_video(video_path, pts_unit = 'sec', output_format='TCHW')
@@ -50,9 +75,9 @@ def get_frames(length_video, video_path, transform, h_w):
             break
     frames = frames.permute(1,0,2,3)
     return frames, reader[-1]["video_fps"]
-
+"D:/classes/project/LRS2/extracted_data/mvlrs_v1/pretrain.txt"
 class LipReadingDataset(Dataset):
-    def __init__(self, directory, transform=None, resolution=0.5, length_video=200, mode="word", tokenizer=None, h_w = (96,96)):
+    def __init__(self, directory, transform=None, resolution=0.5, length_video=200, mode="word", tokenizer=None, h_w = (96,96), useOriginalDataStructure=True, dataset="pretrain"):
         """
         Args:
             directory (string): Directory with all the video folders.
@@ -61,7 +86,10 @@ class LipReadingDataset(Dataset):
         self.directory = directory
         transform = [t.Resize(h_w), t.ToPILImage(), t.ToTensor()]  # 90x90
         self.transform  = t.Compose(transform)
-        self.samples = load_samples(directory)
+        if useOriginalDataStructure:
+            self.samples = load_samples_OriginalDataStructure(directory, dataset)
+        else:
+            self.samples = load_samples(directory)
         self.resolution = resolution
         self.length_video = length_video
         self.mode = mode

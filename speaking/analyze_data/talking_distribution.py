@@ -1,5 +1,4 @@
 import os
-from tkinter import END
 import torchvision
 import logging
 
