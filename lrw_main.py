@@ -149,13 +149,13 @@ def train_lrw(args):
             # [29, 16, 28]
             # print("logits shape", logits.shape)
             # print("input length:", lengths)
-            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+            # predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
         
             # if i % 10 == 0:
             #     print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
         print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
-        wer_result = decoder.wer_batch(predictions, gt)
-        print("WER:", wer_result)
+        # wer_result = decoder.wer_batch(predictions, gt)
+        # print("WER:", wer_result)
         # save_model(model, optimizer, args, args.filepath)
         # if wer_result < best_wer:
         #     best_wer = wer_result
@@ -166,6 +166,39 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
+
+    model.eval()
+    with torch.no_grad():
+        val_dataset = LRWDataset(directory='./LRW/data_splits/val')
+        print("Total val samples loaded:", len(val_dataset))  
+        val_dataloader = DataLoader(
+            val_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            collate_fn=collate_fn,
+            num_workers=args.num_workers,
+            pin_memory=False,
+        )
+        val_predictions, val_gt = [], []
+        progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
+        for i, batch in progress_bar:
+            x, y, lengths, y_lengths, idx = batch
+
+            x, y = x.to(device), y.to(device)
+            logits = model(x)
+            logits = logits.transpose(0, 1)
+            
+            with torch.backends.cudnn.flags(enabled=False):
+                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
+            loss = loss_all.mean()
+            if torch.isnan(loss).any():
+                print ('Skipping iteration with NaN loss')
+                continue
+
+            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+        print(f"test loss: {loss.item():.4f}")
+        wer_result = decoder.wer_batch(predictions, gt)
+        print("WER:", wer_result)    
 
 def test_lrw(args):
     model.eval()
@@ -262,7 +295,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--lr', default=3e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=1, type=int, help='num epoch to train for')
     args = parser.parse_args()
     args.filepath = f'{args.epochs}-{args.lr}-lrw.pt' # Save path.
     if args.train:
