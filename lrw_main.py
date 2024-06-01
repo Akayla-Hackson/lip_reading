@@ -156,15 +156,16 @@ def train_lrw(args):
         print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
         wer_result = decoder.wer_batch(predictions, gt)
         print("WER:", wer_result)
-        if wer_result < best_wer:
-            best_wer = wer_result
-            # save_model(model, optimizer, args, args.filepath)
-            state = {
-                'epoch': epoch,
-                'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                }
-            torch.save(state, f"{epoch}.state")
+        save_model(model, optimizer, args, args.filepath)
+        # if wer_result < best_wer:
+        #     best_wer = wer_result
+        #     # save_model(model, optimizer, args, args.filepath)
+        #     state = {
+        #         'epoch': epoch,
+        #         'state_dict': model.state_dict(),
+        #         'optimizer': optimizer.state_dict(),
+        #         }
+        #     torch.save(state, f"{epoch}.state")
 
 def test_lrw(args):
     model.eval()
