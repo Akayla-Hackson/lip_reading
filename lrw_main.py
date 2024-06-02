@@ -88,8 +88,8 @@ def train_lrw(args):
     model = LipReadingModel(vocab)
     model.to(device)
     criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
-
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
+    scheduler = CosineScheduler(args.lr, args.epochs)
     decoder = Decoder(vocab)
     train_loader = DataLoader(
             train_dataset,
@@ -146,6 +146,8 @@ def train_lrw(args):
             
             logits.backward(dlogits)
             optimizer.step()
+            scheduler.adjust_lr(optimizer, epoch)
+        
             # [29, 16, 28]
             # print("logits shape", logits.shape)
             # print("input length:", lengths)
@@ -169,7 +171,7 @@ def train_lrw(args):
 
     model.eval()
     with torch.no_grad():
-        val_dataset = LRWDataset(directory='./LRW/data_splits/val')
+        val_dataset = LRWDataset(directory='./LRW/data_splits/test')
         print("Total val samples loaded:", len(val_dataset))  
         val_dataloader = DataLoader(
             val_dataset,
@@ -195,7 +197,7 @@ def train_lrw(args):
                 print ('Skipping iteration with NaN loss')
                 continue
 
-            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+            predict(logits, y, lengths, y_lengths, n_show=1, mode='beam')
         print(f"test loss: {loss.item():.4f}")
         wer_result = decoder.wer_batch(predictions, gt)
         print("WER:", wer_result)    
@@ -204,10 +206,10 @@ def test_lrw(args):
     model.eval()
     with torch.no_grad():
         
-        train_dataset = LRWDataset(directory='./LRW/data_splits/val')
-        vocab = train_dataset.vocab
+        test_dataset = LRWDataset(directory='./LRW/data_splits/val')
+        vocab = test_dataset.vocab
     
-        print("Total samples loaded:", len(train_dataset))  
+        print("Total samples loaded:", len(test_dataset))  
 
         model = LipReadingModel(vocab)
         saved = torch.load(args.filepath)
@@ -218,39 +220,18 @@ def test_lrw(args):
         criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
 
         decoder = Decoder(vocab)
-        train_loader = DataLoader(
-            train_dataset,
+        test_loader = DataLoader(
+            test_dataset,
             batch_size=args.batch_size,
-            shuffle=True,
+            shuffle=False,
             collate_fn=collate_fn,
             num_workers=args.num_workers,
             pin_memory=False,
         )
         best_wer = 1.0
         predictions, gt = [], []
-        def predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy'):
-            print ('---------------------------')
         
-            n = min(n_show, logits.size(1))
-        
-            if mode == 'greedy':
-                decoded = decoder.decode_greedy(logits, lengths)
-            elif mode == 'beam':
-                decoded = decoder.decode_beam(logits, lengths)
-
-            predictions.extend(decoded)
-
-            cursor = 0
-            for b in range(x.size(0)):
-                y_str = ''.join([vocab[ch - 1] for ch in y[cursor: cursor + y_lengths[b]]])
-                gt.append(y_str)
-                cursor += y_lengths[b]
-                if b < n:
-                    print ('Test seq {}: {}; pred_{}: {}'.format(b + 1, y_str, mode, decoded[b]))
-
-            print ('---------------------------')
-
-        progress_bar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
+        progress_bar = tqdm(enumerate(test_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for i, batch in progress_bar:
             x, y, lengths, y_lengths, idx = batch
 
@@ -265,7 +246,7 @@ def test_lrw(args):
                 print ('Skipping iteration with NaN loss')
                 continue
 
-            predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+            predict(logits, y, lengths, y_lengths, mode='beam')
         
         print(f"test loss: {loss.item():.4f}")
         wer_result = decoder.wer_batch(predictions, gt)
@@ -286,7 +267,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
-    parser.add_argument('--batch_size', default=16, type=int, help='num entries per batch')
+    parser.add_argument('--batch_size', default=32, type=int, help='num entries per batch')
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
     parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
@@ -295,7 +276,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--lr', default=3e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=1, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=3, type=int, help='num epoch to train for')
     args = parser.parse_args()
     args.filepath = f'{args.epochs}-{args.lr}-lrw.pt' # Save path.
     if args.train:
