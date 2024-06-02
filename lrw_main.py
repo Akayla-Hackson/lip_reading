@@ -102,7 +102,7 @@ def train_lrw(args):
     )
     best_wer = 1.0
     predictions, gt = [], []
-    def predict(logits, y, lengths, y_lengths, n_show=1, mode='greedy'):
+    def predict(logits, y, lengths, y_lengths, n_show=2, mode='greedy'):
         
         n = min(n_show, logits.size(1))
         
@@ -157,13 +157,13 @@ def train_lrw(args):
             # [29, 16, 28]
             # print("logits shape", logits.shape)
             # print("input length:", lengths)
-            # predict(logits, y, lengths, y_lengths, n_show=5, mode='beam')
+            predict(logits, y, lengths, y_lengths, mode='beam')
         
             # if i % 10 == 0:
             #     print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
         print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
-        # wer_result = decoder.wer_batch(predictions, gt)
-        # print("WER:", wer_result)
+        wer_result = decoder.wer_batch(predictions, gt)
+        print("WER:", wer_result)
         # save_model(model, optimizer, args, args.filepath)
         # if wer_result < best_wer:
         #     best_wer = wer_result
@@ -177,8 +177,8 @@ def train_lrw(args):
 
     model.eval()
     with torch.no_grad():
-        val_dataset = LRWDataset(directory='./LRW/data_splits/test')
-        # print("Total val samples loaded:", len(val_dataset))  
+        val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
+        print("Total val samples loaded:", len(val_dataset))  
         val_dataloader = DataLoader(
             val_dataset,
             batch_size=args.batch_size,
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--data_type', default='train', type=str, help='dataset used for training')
-    parser.add_argument('--batch_size', default=32, type=int, help='num entries per batch')
+    parser.add_argument('--batch_size', default=16, type=int, help='num entries per batch')
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
     parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
@@ -282,7 +282,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--lr', default=3e-4, type=int, help='learning rate for optimizer')
     # 3e-4 
-    parser.add_argument('--epochs', default=3, type=int, help='num epoch to train for')
+    parser.add_argument('--epochs', default=10, type=int, help='num epoch to train for')
     args = parser.parse_args()
     args.filepath = f'{args.epochs}-{args.lr}-lrw.pt' # Save path.
     if args.train:

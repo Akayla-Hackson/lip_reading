@@ -13,7 +13,7 @@ characters = list("abcdefghijklmnopqrstuvwxyz ")
 char_to_index = {char: idx for idx, char in enumerate(characters)}
 
 class LRWDataset(Dataset):
-    def __init__(self, directory, transform=None):
+    def __init__(self, directory, transform=None, test=False):
         self.directory = directory
         self.transform = transforms.Compose([
             transforms.Resize((96, 96)),
@@ -37,7 +37,7 @@ class LRWDataset(Dataset):
            
     def _load_samples(self):
         samples = []
-        video_folders = sorted(os.listdir(self.directory))
+        video_folders = os.listdir(self.directory)
         split_name = os.path.basename(self.directory)
         for video_folder in video_folders:
             label = os.path.splitext(video_folder)[0]
@@ -57,8 +57,8 @@ class LRWDataset(Dataset):
                 if os.path.exists(frames_dir):
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
                     samples.append((frames, label))
-            # if len(samples) > 100:
-            #     break        
+            if len(samples) > 10000:
+                break   
         return samples            
 
 
