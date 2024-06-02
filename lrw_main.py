@@ -25,6 +25,7 @@ from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
 from jiwer import wer
 from classes.LRWDataset import LRWDataset
+from optim_utils import CosineScheduler
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 
@@ -101,8 +102,7 @@ def train_lrw(args):
     )
     best_wer = 1.0
     predictions, gt = [], []
-    def predict(logits, y, lengths, y_lengths, n_show=5, mode='greedy'):
-        print ('---------------------------')
+    def predict(logits, y, lengths, y_lengths, n_show=1, mode='greedy'):
         
         n = min(n_show, logits.size(1))
         
@@ -121,10 +121,11 @@ def train_lrw(args):
             if b < n:
                 print ('Test seq {}: {}; pred_{}: {}'.format(b + 1, y_str, mode, decoded[b]))
 
-        print ('---------------------------')
 
     for epoch in range(args.epochs):
+        total_loss = 0
         model.train()
+        num_batches = 0
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for i, batch in progress_bar:
             optimizer.zero_grad()
@@ -137,17 +138,22 @@ def train_lrw(args):
             with torch.backends.cudnn.flags(enabled=False):
                 loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             loss = loss_all.mean()
+
+            # with torch.backends.cudnn.flags(enabled=False):
+            #     loss = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
             if torch.isnan(loss).any():
                 print ('Skipping iteration with NaN loss')
                 continue
 
             weight = torch.ones_like(loss_all)
             dlogits = torch.autograd.grad(loss_all, logits, grad_outputs=weight)[0]
-            
+            # can add gradient clipping 
             logits.backward(dlogits)
+   
             optimizer.step()
             scheduler.adjust_lr(optimizer, epoch)
-        
+            total_loss += loss.item()
+            num_batches += 1
             # [29, 16, 28]
             # print("logits shape", logits.shape)
             # print("input length:", lengths)
@@ -172,7 +178,7 @@ def train_lrw(args):
     model.eval()
     with torch.no_grad():
         val_dataset = LRWDataset(directory='./LRW/data_splits/test')
-        print("Total val samples loaded:", len(val_dataset))  
+        # print("Total val samples loaded:", len(val_dataset))  
         val_dataloader = DataLoader(
             val_dataset,
             batch_size=args.batch_size,
@@ -197,7 +203,7 @@ def train_lrw(args):
                 print ('Skipping iteration with NaN loss')
                 continue
 
-            predict(logits, y, lengths, y_lengths, n_show=1, mode='beam')
+            predict(logits, y, lengths, y_lengths, mode='beam')
         print(f"test loss: {loss.item():.4f}")
         wer_result = decoder.wer_batch(predictions, gt)
         print("WER:", wer_result)    
