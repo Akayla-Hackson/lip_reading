@@ -2,6 +2,7 @@ from  torch.nn import functional as F
 from torch import nn
 from torch.nn import Conv3d
 import numpy as np
+import torch
 class Conv3d(nn.Module):
     def __init__(self, cin, cout, kernel_size, stride, padding, bias=True, residual=False, 
                     *args, **kwargs):
@@ -104,12 +105,42 @@ class Speaking_conv3d_layers(nn.Module):
     def forward(self, x):
         x = self.encoder(x)
         x = x.view((x.shape[0], -1))
-        # size = self.d_model*3*3*self.linear_size
-        # padded_remainder_to_x_match_shape = torch.zeros(size - x.shape[1]).unsqueeze(axis=0).to(x.device)
-        # padded_remainder_to_y_match_shape = torch.zeros(self.linear_size - y.shape[1]).unsqueeze(axis=0).to(x.device)
+        
+        x = self.linear(x)
+        x = x.view(x.shape[0], 2, -1)
+        return x
 
-        # x  = torch.cat((x, padded_remainder_to_x_match_shape), axis=1)
-        # y  = torch.cat((y, padded_remainder_to_y_match_shape), axis=1)
+class Speaking_conv3d_layers_trimmed(nn.Module):
+    def __init__(self, d_model, length_of_video_in_frames):
+        super().__init__()
+        self.linear_size = length_of_video_in_frames 
+        self.d_model = d_model
+        
+        self.encoder = nn.Sequential(
+            Conv3d(3, 64, kernel_size=5, stride=(1, 2, 2), padding=2),  # 48, 48
+
+            Conv3d(64, 128, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)), # 24, 24
+            Conv3d(128, 128, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True),
+
+            Conv3d(128, 256, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)), # 12, 12
+            Conv3d(256, 256, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True),
+
+            Conv3d(256, 512, kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1)), # 6, 6
+            Conv3d(512, 512, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), residual=True),
+
+            Conv3d(512, d_model, kernel_size=(1, 3, 3), stride=1, padding=(0, 0, 0)),
+            )
+        self.avg = nn.MaxPool3d(2)
+        self.nums_int = torch.zeros((1, 512, 45, 5, 5)).to("cuda")
+        
+        self.linear = nn.Linear(d_model*3*3*length_of_video_in_frames, 2*length_of_video_in_frames) # output size is 1 or zero times the temporal dimension
+
+    def forward(self, x):
+
+        x = self.encoder(x)
+        self.nums_int[:, :, :, :4, :4] = self.avg(x)[:, :, :45]
+        x = self.nums_int
+        x = x.reshape((x.shape[0], -1))
         
         x = self.linear(x)
         x = x.view(x.shape[0], 2, -1)

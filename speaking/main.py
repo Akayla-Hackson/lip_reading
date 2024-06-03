@@ -16,12 +16,12 @@ from transformers import AutoTokenizer
 
 torch.manual_seed(42)
 
-def validate(loader, model, criterion, writer=None, total_len=0, idx=0, isWrite=False):
-    progress_bar = tqdm(loader, total=len(loader))
+def validate(loader, model, criterion, writer=None, total_len=0, idx=0, isWrite=False, device="cuda"):
     total_correct = total_words = 0
     zeros = ones = 0
     loss = 0
     poor = []
+    progress_bar = tqdm(loader, total=len(loader))
     if isWrite:
         file = open("./speaking/analyze_data/val_perf_lower_than50.txt", "w")
     for frames, label, video_path in progress_bar:
@@ -29,9 +29,9 @@ def validate(loader, model, criterion, writer=None, total_len=0, idx=0, isWrite=
         with torch.no_grad():
             output = model(frames)
             correct = torch.sum(torch.argmax(output, axis=1) == label).detach().item()
-            total =  label.shape[1]
+            total_instance =  label.shape[1]
             total_correct += correct
-            total_words += total# this only works if its 1 batch size since other wise they will be padded
+            total_words += total_instance# this only works if its 1 batch size since other wise they will be padded
 
             if isWrite and correct/total <= 0.5:
                 # file.write(f"{video_path} : {correct/total}\n")
@@ -44,6 +44,9 @@ def validate(loader, model, criterion, writer=None, total_len=0, idx=0, isWrite=
                 loss += loss_tensor.detach().item() 
             ones += torch.sum(label==1)
             zeros += torch.sum(label==0)
+           
+            progress_bar.set_postfix(accuracy=f'{total_correct/total_words:.2%}', Ones_frac=f'{ones/total_words:.2%}', zeros_frac=f'{zeros/total_words:.2%}' )
+            progress_bar.update(1)
     total = ones + zeros
     if isWrite:
         file.writelines(str(sorted(poor)))

@@ -54,7 +54,7 @@ def get_file_data(F):
                 if line == "WORD START END ASDSCORE":
                     is_start_line = True
                 continue
-            yield  line.split("")
+            yield  line.split(" ")
 
 
 def get_file_data_sentence(F):
@@ -109,13 +109,17 @@ class LipReadingDataset(Dataset):
         return frames, labels_np, video_path
     
     def get_labels(self, label_file, labels_np, frame_rate):
+        if self.mode == "speak":
+            assert (labels_np == 0).all(), "not all are zero for mode speak"
+        elif self.mode == "word":
+            assert (labels_np == 1).all(), "not all are zero for mode word"
         with open(label_file, "r") as F:
             for word, curr_start, curr_end, _ in get_file_data(F):
                 curr_start = math.ceil(float(curr_start) * frame_rate)
                 curr_end = math.floor(float(curr_end) * frame_rate)
-                if self.mode != "word":
+                if self.mode == "speak":
                     labels_np[curr_start: curr_end + 1] = 1
-                else:
+                elif self.mode == "word":
                     labels_np[curr_start: curr_end + 1] = self.tokenizer(word, add_special_tokens=False)['input_ids'][0]
                 if curr_end == self.length_video:
                     break
