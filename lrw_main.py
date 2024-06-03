@@ -103,9 +103,7 @@ def train_lrw(args):
     best_wer = 1.0
     predictions, gt = [], []
     def predict(logits, y, lengths, y_lengths, n_show=2, mode='greedy'):
-        
         n = min(n_show, logits.size(1))
-        
         if mode == 'greedy':
             decoded = decoder.decode_greedy(logits, lengths)
         elif mode == 'beam':
@@ -159,9 +157,13 @@ def train_lrw(args):
             # print("input length:", lengths)
             predict(logits, y, lengths, y_lengths, mode='beam')
         
-            # if i % 10 == 0:
-            #     print(f"Epoch [{epoch+1}/{args.epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
         print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
+        
+       
+        # Calculate accuracy
+        correct_predictions = sum([1 for ground_truth, pred in zip(gt, predictions) if ground_truth == pred])
+        accuracy = correct_predictions / len(predictions) * 100
+        print(f"Accuracy: {accuracy}%")
         wer_result = decoder.wer_batch(predictions, gt)
         print("WER:", wer_result)
         # save_model(model, optimizer, args, args.filepath)
