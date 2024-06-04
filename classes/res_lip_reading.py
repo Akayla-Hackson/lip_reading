@@ -8,16 +8,15 @@ import torch.nn.functional as F
 import torch
 
 class LipReadingModel(nn.Module):
-    def __init__(self, vocab):
+    def __init__(self):
         super().__init__()
-        self.vocab = vocab
         self.conv3d = nn.Conv3d(in_channels=3, out_channels=64, kernel_size=(5, 7, 7), stride=(1, 2, 2), padding=(2, 3, 3))
         self.bn = nn.BatchNorm3d(num_features=64)
         self.relu = nn.ReLU()
         self.pool = nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1))
         
         self.resnet18 = ResNet(BasicBlock, [2, 2, 2, 2])
-        self.lstm = nn.LSTM(input_size=512, hidden_size=1025, num_layers=2, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(input_size=512, hidden_size=1024, num_layers=2, batch_first=True, bidirectional=True)
         self.fc = nn.Linear(1024 * 2, 500)
         self.dropout = nn.Dropout(p=0.5)
 
@@ -34,11 +33,12 @@ class LipReadingModel(nn.Module):
         x = x.view(-1, 64, x.size(3), x.size(4))
         x = self.resnet18(x)
 
-        x = x.view(b, -1, 512) 
+        x = x.view(batch_size, -1, 512) 
+        # [16, 29, 512]
+        # print("After View shape:", x.shape)
         x, _ = self.lstm(x)
-        x = self.fc(self.dropout(x))
+        x = self.fc(self.dropout(x)).mean(1)
         # x = x.view(x.size(0), x.size(1), -1)  # (batch, time, features)
-        # # print("After View shape:", x.shape)
         # x, _ = self.lstm(x)
         # x = self.fc(x)
         return x

@@ -9,7 +9,7 @@ from classes.dataset import LipReadingDataset
 from classes.cnn import CNN
 from classes.lstm import LSTM
 from classes.transformer import Transformer
-from classes.lip_reading import LipReadingModel
+from classes.res_lip_reading import LipReadingModel
 import torch
 import os
 from torch.nn.utils.rnn import pad_sequence
@@ -46,29 +46,6 @@ def collate_fn(batch):
     
     return x, y, lengths, y_lengths, ids
 
-    # max_length = max(len(sample['video']) for sample in batch)
-    # batch_size = len(batch)
-    # c, h, w = batch[0]['video'][0].shape
-
-    # videos = torch.zeros((batch_size, max_length, c, h, w))
-    # labels = []
-    # input_lengths = []
-    # target_lengths = []
-
-    # for i, sample in enumerate(batch):
-    #     video = sample['video']
-    #     length = len(video)
-        
-    #     videos[i, :length, :, :, :] = video
-    #     labels.extend(sample['label'].tolist())
-    #     input_lengths.append(torch.tensor(length))
-    #     target_lengths.append(len(sample['label']))
-
-    # labels = torch.IntTensor(labels)
-    # return {'video': videos, 'label': labels, 'input_lengths': torch.stack(input_lengths), 'target_lengths': torch.tensor(target_lengths, dtype=torch.long)}
-    # sequences, labels = zip(*batch)
-    # print(batch)
-    # return torch.stack(sequences[0]), labels
 def save_model(model, optimizer, args, filepath):
     save_info = {
         'model': model.state_dict(),
@@ -79,15 +56,15 @@ def save_model(model, optimizer, args, filepath):
     torch.save(save_info, filepath)
     print(f"save the model to {filepath}")
 
-
 def train_lrw(args):
     now = datetime.datetime.now()
     save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.lr}/Date_{now.month}_{now.day}_hr_{now.hour}'
     os.makedirs(save_path, exist_ok=True)
     writer = SummaryWriter(f'runs/{save_path}')
+
     train_dataset = LRWDataset(directory='./LRW/data_splits/train')
     vocab = train_dataset.vocab
-    print ('vocab = {}'.format('|'.join(train_dataset.vocab)))  
+    
     print("Total samples loaded:", len(train_dataset))  
 
     model = LipReadingModel()
@@ -104,7 +81,7 @@ def train_lrw(args):
             pin_memory=False,
     )
     best_wer = 1.0
-    predictions, gt = [], []
+    v_acc = []
 
     for epoch in range(args.epochs):
         total_loss = 0
@@ -114,9 +91,11 @@ def train_lrw(args):
         for i, batch in progress_bar:
             optimizer.zero_grad()
             video, label = batch
-
             video, label = video.to(device), label.to(device)
-            y = model(x)
+
+            y = model(video)
+            # [16, 29, 500]
+            # print(y.shape)
             loss = criterion(y, label)
    
             loss.backward()
@@ -125,12 +104,16 @@ def train_lrw(args):
             total_loss += loss.item()
             num_batches += 1
 
-        
+            writer.add_scalar('Loss/train', loss.item(), epoch * len(train_loader) + i)
+
         print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
-        writer.add_scalar('Loss/train', loss.item(), epoch)
+        writer.add_scalar('Loss/epoch_train', total_loss/num_batches, epoch)
        
         # Calculate accuracy
-        
+        v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
+        acc = float(np.array(v_acc).reshape(-1).mean())
+        print(f"Accuracy: {acc:.4f}")
+        writer.add_scalar('Accuracy', acc, epoch)
         # save_model(model, optimizer, args, args.filepath)
         # if wer_metric < best_wer:
         #     best_wer = wer_metric
@@ -153,26 +136,18 @@ def train_lrw(args):
             num_workers=args.num_workers,
             pin_memory=False,
         )
-        val_predictions, val_gt = [], []
+        v_acc = []
         progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
         for i, batch in progress_bar:
-            x, y, lengths, y_lengths, idx = batch
-
-            x, y = x.to(device), y.to(device)
-            logits = model(x)
-            logits = logits.transpose(0, 1)
+            video, label = batch
+            video, label = video.to(device), label.to(device)
             
-            with torch.backends.cudnn.flags(enabled=False):
-                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
-            loss = loss_all.mean()
-            if torch.isnan(loss).any():
-                print ('Skipping iteration with NaN loss')
-                continue
-
-            predict(logits, y, lengths, y_lengths, mode='beam')
+            y = model(video)
+            loss = criterion(y, label)
         print(f"test loss: {loss.item():.4f}")
-        wer_result = decoder.wer_batch(predictions, gt)
-        print("WER:", wer_result)    
+        v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
+        acc = float(np.array(v_acc).reshape(-1).mean())
+        print(f"Accuracy: {acc:.4f}")
 
 def test_lrw(args):
     model.eval()
