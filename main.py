@@ -124,29 +124,30 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
-        model.eval()
-        with torch.no_grad():
-            val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
-            print("Total val samples loaded:", len(val_dataset))  
-            val_dataloader = DataLoader(
-                val_dataset,
-                batch_size=args.batch_size,
-                shuffle=False,
-                num_workers=args.num_workers,
-                pin_memory=False,
-            )
-            v_acc = []
-            progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
-            for i, batch in progress_bar:
-                video, label = batch
-                video, label = video.to(device), label.to(device)
+        if epoch % 10 == 0:
+            model.eval()
+            with torch.no_grad():
+                val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
+                print("Total val samples loaded:", len(val_dataset))  
+                val_dataloader = DataLoader(
+                    val_dataset,
+                    batch_size=args.batch_size,
+                    shuffle=False,
+                    num_workers=args.num_workers,
+                    pin_memory=False,
+                )
+                v_acc = []
+                progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
+                for i, batch in progress_bar:
+                    video, label = batch
+                    video, label = video.to(device), label.to(device)
             
-                y = model(video)
-                loss = criterion(y, label)
-            print(f"test loss: {loss.item():.4f}")
-            v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
-            acc = float(np.array(v_acc).reshape(-1).mean())
-            print(f"Accuracy: {acc:.4f}")
+                    y = model(video)
+                    loss = criterion(y, label)
+                print(f"test loss: {loss.item():.4f}")
+                v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
+                acc = float(np.array(v_acc).reshape(-1).mean())
+                print(f"Accuracy: {acc:.4f}")
    
 def test_lrw(args):
     model.eval()
