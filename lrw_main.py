@@ -81,6 +81,10 @@ def save_model(model, optimizer, args, filepath):
 
 
 def train_lrw(args):
+    now = datetime.datetime.now()
+    save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.lr}/Date_{now.month}_{now.day}_hr_{now.hour}'
+    os.makedirs(save_path, exist_ok=True)
+    writer = SummaryWriter(f'runs/{save_path}')
     train_dataset = LRWDataset(directory='./LRW/data_splits/train')
     vocab = train_dataset.vocab
     print ('vocab = {}'.format('|'.join(train_dataset.vocab)))  
@@ -158,17 +162,19 @@ def train_lrw(args):
             predict(logits, y, lengths, y_lengths, mode='beam')
         
         print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
-        
+        writer.add_scalar('Loss/train', loss.item(), epoch)
        
         # Calculate accuracy
         correct_predictions = sum([1 for ground_truth, pred in zip(gt, predictions) if ground_truth == pred])
         accuracy = correct_predictions / len(predictions) * 100
         print(f"Accuracy: {accuracy}%")
-        wer_result = decoder.wer_batch(predictions, gt)
+        wer_metric = decoder.wer_batch(predictions, gt)
+        cer_metric = decoder.cer_batch(predictions, gt)
         print("WER:", wer_result)
+        print("CER:", wer_result)
         # save_model(model, optimizer, args, args.filepath)
-        # if wer_result < best_wer:
-        #     best_wer = wer_result
+        # if wer_metric < best_wer:
+        #     best_wer = wer_metric
         #     # save_model(model, optimizer, args, args.filepath)
         #     state = {
         #         'epoch': epoch,
