@@ -28,7 +28,7 @@ from classes.LRWDataset import LRWDataset
 from optim_utils import CosineScheduler
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
-
+import matplotlib.pyplot as plt
 
 def collate_fn(batch):
     xs, ys, lens, indices = zip(*batch)
@@ -106,7 +106,7 @@ def train_lrw(args):
 
             writer.add_scalar('Loss/train', loss.item(), epoch * len(train_loader) + i)
 
-        print(f"Average Loss for Epoch {epoch}: {loss.item():.4f}")
+        print(f"Loss for Epoch {epoch}: {total_loss:.4f}")
         writer.add_scalar('Loss/epoch_train', total_loss/num_batches, epoch)
        
         # Calculate accuracy
@@ -218,7 +218,6 @@ if __name__ == "__main__":
     parser.add_argument('--grad_accum_steps', default=16, type=int, help='How many steps to acumulate grad')
     parser.add_argument('--train', default=True, type=bool, help='Train or eval')
 
-
     parser.add_argument('--num_workers', default=1, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--lr', default=3e-4, type=int, help='learning rate for optimizer')
@@ -230,3 +229,4 @@ if __name__ == "__main__":
         train_lrw(args)
     else:    
         test_lrw(args)
+
