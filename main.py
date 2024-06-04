@@ -124,9 +124,9 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
-        test_lrw(args)
+        test_lrw(args, model)
    
-def test_lrw(args):
+def test_lrw(args, model):
     model.eval()
     with torch.no_grad():
         val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
