@@ -124,7 +124,9 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
-
+        test_lrw(args)
+   
+def test_lrw(args):
     model.eval()
     with torch.no_grad():
         val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
@@ -149,55 +151,6 @@ def train_lrw(args):
         acc = float(np.array(v_acc).reshape(-1).mean())
         print(f"Accuracy: {acc:.4f}")
 
-def test_lrw(args):
-    model.eval()
-    with torch.no_grad():
-        
-        test_dataset = LRWDataset(directory='./LRW/data_splits/val')
-        vocab = test_dataset.vocab
-    
-        print("Total samples loaded:", len(test_dataset))  
-
-        model = LipReadingModel(vocab)
-        saved = torch.load(args.filepath)
-        model.load_state_dict(saved['model'])
-        model.to(device)
-        print(f"Loaded model to test from {args.filepath}")
-
-        criterion = nn.CTCLoss(reduction='none', zero_infinity=True)
-
-        decoder = Decoder(vocab)
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=args.batch_size,
-            shuffle=False,
-            collate_fn=collate_fn,
-            num_workers=args.num_workers,
-            pin_memory=False,
-        )
-        best_wer = 1.0
-        predictions, gt = [], []
-        
-        progress_bar = tqdm(enumerate(test_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
-        for i, batch in progress_bar:
-            x, y, lengths, y_lengths, idx = batch
-
-            x, y = x.to(device), y.to(device)
-            logits = model(x)
-            logits = logits.transpose(0, 1)
-            
-            with torch.backends.cudnn.flags(enabled=False):
-                loss_all = criterion(F.log_softmax(logits, dim=-1), y, lengths, y_lengths)
-            loss = loss_all.mean()
-            if torch.isnan(loss).any():
-                print ('Skipping iteration with NaN loss')
-                continue
-
-            predict(logits, y, lengths, y_lengths, mode='beam')
-        
-        print(f"test loss: {loss.item():.4f}")
-        wer_result = decoder.wer_batch(predictions, gt)
-        print("WER:", wer_result)
         
 
 if __name__ == "__main__":
