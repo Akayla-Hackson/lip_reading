@@ -65,8 +65,7 @@ def get_top_difficult_words(misclassified_words, top_n=20):
     return sorted_misclassified_words[:top_n]
     
 def train_lrw(args):
-    misclassified_words = defaultdict(int)  # Dictionary to count misclassifications
-    misclassified_video_paths = defaultdict(int)
+    
     now = datetime.datetime.now()
     save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.lr}/Date_{now.month}_{now.day}_hr_{now.hour}'
     os.makedirs(save_path, exist_ok=True)
@@ -94,6 +93,8 @@ def train_lrw(args):
     v_acc = []
 
     for epoch in range(args.epochs):
+        misclassified_words = defaultdict(int)  # Dictionary to count misclassifications
+        misclassified_video_paths = defaultdict(int)
         total_loss = 0
         model.train()
         num_batches = 0
