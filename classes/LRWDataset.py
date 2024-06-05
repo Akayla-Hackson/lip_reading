@@ -24,7 +24,7 @@ class LRWDataset(Dataset):
         self.vocab_unordered[' '] = True
         for char in characters:
             self.vocab_unordered[char] = True
-
+        self.test = test
         self.samples = self._load_samples()
         self.vocab = []
         for char in self.vocab_unordered: self.vocab.append(char)
@@ -59,8 +59,10 @@ class LRWDataset(Dataset):
                 if os.path.exists(frames_dir):
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
                     samples.append((frames, label, video_path))
-            if len(samples) > 10000:
+            if self.test and len(samples) > 2000:
                 break   
+            if len(samples) > 20000:
+                break
         return samples            
 
 

@@ -90,11 +90,11 @@ def train_lrw(args):
             pin_memory=False,
     )
     best_wer = 1.0
-    v_acc = []
-
+    misclassified_video_paths = defaultdict(int)
     for epoch in range(args.epochs):
+        v_acc = []
         misclassified_words = defaultdict(int)  # Dictionary to count misclassifications
-        misclassified_video_paths = defaultdict(int)
+       
         total_loss = 0
         model.train()
         num_batches = 0
@@ -109,7 +109,7 @@ def train_lrw(args):
             # [16, 29, 500]
             # print(y.shape)
             loss = criterion(y, label)
-   
+            # print(label)
             loss.backward()
             optimizer.step()
             scheduler.adjust_lr(optimizer, epoch)
@@ -120,13 +120,14 @@ def train_lrw(args):
             batch_acc = (y.argmax(dim=-1) == label).cpu().numpy().tolist()
             v_acc.extend(batch_acc)
 
-            for word, video_path, pred, true in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
-                if pred != true:
-                    misclassified_words[word] += 1
+            for word, video_path, pred, label in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
+                if pred != label:
+                    # print(pred, label)
+                    misclassified_words[(word, labels[pred])] += 1
                     misclassified_video_paths[video_path] += 1
         print(f"Loss for Epoch {epoch}: {total_loss:.4f}")
         writer.add_scalar('Loss/epoch_train', total_loss/num_batches, epoch)
-        print(len(v_acc))
+        
         # Calculate accuracy
         acc = float(np.array(v_acc).reshape(-1).mean())
         print(f"Accuracy: {acc:.4f}")
@@ -134,7 +135,7 @@ def train_lrw(args):
         top_difficult_words = get_top_difficult_words(misclassified_words, top_n=20)
         for word, count in top_difficult_words:
             print(f"Word: '{word}', Misclassifications: {count}")
-        top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=20) 
+        top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=10) 
         for path, count in top_video_paths:
             print(f"Video Path: '{path}', Misclassifications: {count}")
         # save_model(model, optimizer, args, args.filepath)
@@ -173,18 +174,21 @@ def train_lrw(args):
                     v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
                 
                     for word, video_path, pred, true in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
-                        if pred != true:
-                            misclassified_words[word] += 1
+                        if pred != label:
+                            # print(pred, label)
+                            misclassified_words[(word, labels[pred])] += 1
                             misclassified_video_paths[video_path] += 1
                 
                 print(f"test loss: {loss.item():.4f}")
+                writer.add_scalar('Test loss', loss.item(), epoch)
                 acc = float(np.array(v_acc).reshape(-1).mean())
                 print(f"Accuracy: {acc:.4f}")
+                writer.add_scalar('Test accuracy', acc, epoch)
 
                 top_difficult_words = get_top_difficult_words(misclassified_words, top_n=20)
                 for word, count in top_difficult_words:
-                    print(f"Word: '{word}', Misclassifications: {count}")
-                top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=20) 
+                    print(f"Word: '{word}', Misclassifications: {count}, ")
+                top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=10) 
                 for path, count in top_video_paths:
                     print(f"Video Path: '{path}', Misclassifications: {count}")
    
