@@ -29,6 +29,7 @@ from optim_utils import CosineScheduler
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from collections import defaultdict
 
 def collate_fn(batch):
     xs, ys, lens, indices = zip(*batch)
@@ -56,14 +57,23 @@ def save_model(model, optimizer, args, filepath):
     torch.save(save_info, filepath)
     print(f"save the model to {filepath}")
 
+# Function to get the top 20 most difficult words
+def get_top_difficult_words(misclassified_words, top_n=20):
+    # Sort the words by the number of misclassifications in descending order
+    sorted_misclassified_words = sorted(misclassified_words.items(), key=lambda item: item[1], reverse=True)
+    # Get the top N difficult words
+    return sorted_misclassified_words[:top_n]
+    
 def train_lrw(args):
+    misclassified_words = defaultdict(int)  # Dictionary to count misclassifications
+    misclassified_video_paths = defaultdict(int)
     now = datetime.datetime.now()
     save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.lr}/Date_{now.month}_{now.day}_hr_{now.hour}'
     os.makedirs(save_path, exist_ok=True)
     writer = SummaryWriter(f'runs/{save_path}')
 
     train_dataset = LRWDataset(directory='./LRW/data_splits/train')
-    vocab = train_dataset.vocab
+    labels = train_dataset.labels
     
     print("Total samples loaded:", len(train_dataset))  
 
@@ -90,10 +100,11 @@ def train_lrw(args):
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for i, batch in progress_bar:
             optimizer.zero_grad()
-            video, label = batch
+            video, label, words, video_paths = batch
             video, label = video.to(device), label.to(device)
 
             y = model(video)
+            predictions = y.argmax(dim=-1)
             # [16, 29, 500]
             # print(y.shape)
             loss = criterion(y, label)
@@ -105,15 +116,26 @@ def train_lrw(args):
             num_batches += 1
 
             writer.add_scalar('Loss/train', loss.item(), epoch * len(train_loader) + i)
+            batch_acc = (y.argmax(dim=-1) == label).cpu().numpy().tolist()
+            v_acc.extend(batch_acc)
 
+            for word, video_path, pred, true in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
+                if pred != true:
+                    misclassified_words[word] += 1
+                    misclassified_video_paths[video_path] += 1
         print(f"Loss for Epoch {epoch}: {total_loss:.4f}")
         writer.add_scalar('Loss/epoch_train', total_loss/num_batches, epoch)
-       
+        print(len(v_acc))
         # Calculate accuracy
-        v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
         acc = float(np.array(v_acc).reshape(-1).mean())
         print(f"Accuracy: {acc:.4f}")
         writer.add_scalar('Accuracy', acc, epoch)
+        top_difficult_words = get_top_difficult_words(misclassified_words, top_n=20)
+        for word, count in top_difficult_words:
+            print(f"Word: '{word}', Misclassifications: {count}")
+        top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=20) 
+        for path, count in top_video_paths:
+            print(f"Video Path: '{path}', Misclassifications: {count}")
         # save_model(model, optimizer, args, args.filepath)
         # if wer_metric < best_wer:
         #     best_wer = wer_metric
@@ -124,7 +146,9 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
-        if epoch % 10 == 0:
+        if (epoch + 1) % 10 == 0:
+            misclassified_words = defaultdict(int) 
+            misclassified_video_paths = defaultdict(int)
             model.eval()
             with torch.no_grad():
                 val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
@@ -139,15 +163,29 @@ def train_lrw(args):
                 v_acc = []
                 progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
                 for i, batch in progress_bar:
-                    video, label = batch
+                    video, label, words, video_paths = batch
                     video, label = video.to(device), label.to(device)
             
                     y = model(video)
                     loss = criterion(y, label)
+                    predictions = y.argmax(-1)
+                    v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
+                
+                    for word, video_path, pred, true in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
+                        if pred != true:
+                            misclassified_words[word] += 1
+                            misclassified_video_paths[video_path] += 1
+                
                 print(f"test loss: {loss.item():.4f}")
-                v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
                 acc = float(np.array(v_acc).reshape(-1).mean())
                 print(f"Accuracy: {acc:.4f}")
+
+                top_difficult_words = get_top_difficult_words(misclassified_words, top_n=20)
+                for word, count in top_difficult_words:
+                    print(f"Word: '{word}', Misclassifications: {count}")
+                top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=20) 
+                for path, count in top_video_paths:
+                    print(f"Video Path: '{path}', Misclassifications: {count}")
    
 def test_lrw(args):
     model.eval()

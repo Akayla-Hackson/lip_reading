@@ -15,9 +15,9 @@ class LipReadingModel(nn.Module):
         self.relu = nn.ReLU()
         self.pool = nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1))
         
-        # self.resnet18 = ResNet(BasicBlock, [2, 2, 2, 2])
-        resnet18 = models.resnet18(pretrained=True)
-        self.resnet18 = nn.Sequential(*list(resnet18.children())[:-2])
+        self.resnet18 = ResNet(BasicBlock, [2, 2, 2, 2])
+        #resnet18 = models.resnet18(pretrained=True)
+        #self.resnet18 = nn.Sequential(*list(resnet18.children())[:-2])
 
         self.lstm = nn.LSTM(input_size=512, hidden_size=1024, num_layers=2, batch_first=True, bidirectional=True)
         self.fc = nn.Linear(1024 * 2, 500)
