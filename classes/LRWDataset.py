@@ -58,7 +58,7 @@ class LRWDataset(Dataset):
                 frames_dir = os.path.join(video_path, 'frames')
                 if os.path.exists(frames_dir):
                     frames = [os.path.join(frames_dir, f) for f in sorted(os.listdir(frames_dir)) if f.endswith('.jpg')]
-                    samples.append((frames, label))
+                    samples.append((frames, label, video_path))
             if len(samples) > 10000:
                 break   
         return samples            
@@ -82,9 +82,9 @@ class LRWDataset(Dataset):
         
     #     return frames, y, length, idx
     def __getitem__(self, idx):
-        frames_path, label = self.samples[idx]
+        frames_path, label, video_path = self.samples[idx]
         frames = [self.transform(Image.open(frame)) for frame in frames_path]
         
         frames = torch.stack(frames)
 
-        return frames, self.labels.index( label )
+        return frames, self.labels.index( label ), label, video_path
