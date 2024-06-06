@@ -101,14 +101,14 @@ def train_lrw(args):
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
         for i, batch in progress_bar:
             optimizer.zero_grad()
-            video, label, words, video_paths = batch
-            video, label = video.to(device), label.to(device)
+            video, targets, words, video_paths = batch
+            video, targets = video.to(device), targets.to(device)
 
             y = model(video)
             predictions = y.argmax(dim=-1)
             # [16, 29, 500]
             # print(y.shape)
-            loss = criterion(y, label)
+            loss = criterion(y, targets)
             # print(label)
             loss.backward()
             optimizer.step()
@@ -117,10 +117,10 @@ def train_lrw(args):
             num_batches += 1
 
             writer.add_scalar('Loss/train', loss.item(), epoch * len(train_loader) + i)
-            batch_acc = (y.argmax(dim=-1) == label).cpu().numpy().tolist()
+            batch_acc = (y.argmax(dim=-1) == targets).cpu().numpy().tolist()
             v_acc.extend(batch_acc)
 
-            for word, video_path, pred, label in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
+            for word, video_path, pred, label in zip(words, video_paths, predictions.cpu().numpy(), targets.cpu().numpy()):
                 if pred != label:
                     # print(pred, label)
                     misclassified_words[(word, labels[pred])] += 1
@@ -138,6 +138,7 @@ def train_lrw(args):
         top_video_paths = get_top_difficult_words(misclassified_video_paths, top_n=10) 
         for path, count in top_video_paths:
             print(f"Video Path: '{path}', Misclassifications: {count}")
+
         # save_model(model, optimizer, args, args.filepath)
         # if wer_metric < best_wer:
         #     best_wer = wer_metric
@@ -148,7 +149,7 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 1 == 0:
             misclassified_words = defaultdict(int) 
             misclassified_video_paths = defaultdict(int)
             model.eval()
@@ -165,15 +166,15 @@ def train_lrw(args):
                 v_acc = []
                 progress_bar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
                 for i, batch in progress_bar:
-                    video, label, words, video_paths = batch
-                    video, label = video.to(device), label.to(device)
+                    video, targets, words, video_paths = batch
+                    video, targets = video.to(device), targets.to(device)
             
                     y = model(video)
-                    loss = criterion(y, label)
+                    loss = criterion(y, targets)
                     predictions = y.argmax(-1)
-                    v_acc.extend((y.argmax(-1) == label).cpu().numpy().tolist())
+                    v_acc.extend((y.argmax(-1) == targets).cpu().numpy().tolist())
                 
-                    for word, video_path, pred, true in zip(words, video_paths, predictions.cpu().numpy(), label.cpu().numpy()):
+                    for word, video_path, pred, label in zip(words, video_paths, predictions.cpu().numpy(), targets.cpu().numpy()):
                         if pred != label:
                             # print(pred, label)
                             misclassified_words[(word, labels[pred])] += 1
