@@ -71,7 +71,7 @@ def train_lrw(args):
     os.makedirs(save_path, exist_ok=True)
     writer = SummaryWriter(f'runs/{save_path}')
 
-    train_dataset = LRWDataset(directory='./LRW/data_splits/train')
+    train_dataset = LRWDataset(directory='./data_splits/train')
     labels = train_dataset.labels
     
     print("Total samples loaded:", len(train_dataset))  
@@ -154,7 +154,7 @@ def train_lrw(args):
             misclassified_video_paths = defaultdict(int)
             model.eval()
             with torch.no_grad():
-                val_dataset = LRWDataset(directory='./LRW/data_splits/val', test=True)
+                val_dataset = LRWDataset(directory='./data_splits/val', test=True)
                 print("Total val samples loaded:", len(val_dataset))  
                 val_dataloader = DataLoader(
                     val_dataset,
