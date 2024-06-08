@@ -9,6 +9,9 @@ from classes.cnn import CNN
 from classes.lstm import LSTM
 from classes.transformer import Transformer
 from classes.lip_reading import LipReadingModel
+from classes.hw_lip_reading import HwLipReadingModel
+from classes.hw_transformer import *
+from classes.hw_transformer_layers import *
 import torch
 import os
 from torch.nn.utils.rnn import pad_sequence
@@ -22,6 +25,8 @@ import numpy as np
 import random
 from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
+from jiwer import wer
+from matplotlib.lines import Line2D
 
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
@@ -34,14 +39,19 @@ random.seed(RANDOM_SEED)
 # Pad each sequence to be the same length within the batch
 def collate_fn(batch):
     sequences, labels = zip(*batch)
-    encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
-    
+    encoded_labels = tokenizer(labels, add_special_tokens=False, max_length=100, padding="longest",  return_tensors='pt')
     return torch.unsqueeze(torch.stack(sequences[0]), axis=0), encoded_labels
+# def collate_fn(batch):
+#     sequences, labels = zip(*batch)
+#     sequences = torch.stack(sequences) 
+#     encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest", return_tensors='pt')
+#     return sequences, encoded_labels
 
 
 def main(args):
     now = datetime.datetime.now()
-    model = LipReadingModel()
+    # model = LipReadingModel()
+    model = HwLipReadingModel()
     model.to(device)
 
     if args.train:
@@ -63,32 +73,36 @@ def main(args):
         optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
         # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
         scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_dataset)/args.grad_accum_steps))
-        criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
+        criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, vocab size, sequence_length] Targets: [batch_size, sequence_length]
 
+        loss_history = []
         for epoch in range(args.epochs):
             model.train() 
-            total_loss = 0
+            total_loss = 0 
             avg_loss = loss_accum = 0
             
             progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
             for batch_idx, (frames, targets) in progress_bar:
                 frames, input_id, masks = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].bool().to(device, non_blocking=True)
 
-                # decoded_sequences = tokenizer.batch_decode(input_id, skip_special_tokens=False)
-                # for idx, seq in enumerate(decoded_sequences):
-                #     token_count = (input_id[idx] != tokenizer.pad_token_id).sum()
-                #     print("Decoded sequence:", seq)
-                #     print("Number of tokens (excluding padding):", token_count.item())
-                # tokens = tokenizer.convert_ids_to_tokens(input_id[0])  
-                # print(tokens)
+                captions_in = input_id[:, :-1].to(device)
+                captions_out = input_id[:, 1:].to(device)
+                mask = (captions_out != tokenizer.pad_token_id).to(device)
 
-                # print(tokenizer.batch_decode(input_id, skip_special_tokens=False))
-                # print(masks)
-                # exit()
-            
-                output = model(frames, input_id, args.train)
+                # print("captions in", captions_in)
+                # print(tokenizer.batch_decode(captions_in, skip_special_tokens=False))
+                # print("captions out", captions_out)
+                # print(tokenizer.batch_decode(captions_out, skip_special_tokens=False))
 
-                loss = criterion(output, input_id) 
+                logits = model(frames, captions_in, args.train)
+                logits = logits.permute(0, 2, 1)
+                # loss = transformer_temporal_softmax_loss(logits, captions_out, mask)
+                loss = criterion(logits, captions_out)
+
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+                # total_loss += loss.item()
                 loss_accum += loss
                 loss = loss.detach()
                 total_loss += loss
@@ -97,19 +111,19 @@ def main(args):
                 if batch_idx != 0 and batch_idx % args.grad_accum_steps == 0:
                     optimizer.zero_grad()
                     loss_accum.backward()
+                    # plot_grad_flow(model.named_parameters())
                     del loss_accum
                     nn.utils.clip_grad_norm_(model.parameters(), 1, error_if_nonfinite=True)
                     loss_accum = 0
                     optimizer.step()
                     scheduler.step()
 
+                # writer.add_scalar('Training Loss', loss.item(), epoch * len(data_loader) + batch_idx)
                 writer.add_scalar('Training Loss', loss, epoch * len(data_loader) + batch_idx)
                 writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
-                del loss, frames, masks, targets
 
-                
                 print("target \n",tokenizer.batch_decode(input_id))
-                print("Guess \n",tokenizer.batch_decode(torch.argmax(output, dim=1)))
+                print("Guess \n",tokenizer.batch_decode(torch.argmax(logits, dim=1)))
             average_loss = total_loss / len(data_loader)
             writer.add_scalar('Average Training Loss', average_loss, epoch)
             print(f"Average Loss for Epoch {epoch}: {average_loss}")
@@ -158,8 +172,6 @@ def main(args):
                     sample_wer = wer(reference, predicted)
                     total_wer += sample_wer
                     num_samples += 1
-                total_correct += torch.sum(output == input_id).detach().item()
-                total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
                 # print("Predictions:", predicted_texts)
                 # print("References:", reference_texts)
 
@@ -169,16 +181,97 @@ def main(args):
             writer.add_scalar('Val WER', sample_wer, len(val_data_loader) + batch_idx)
         
         # Calc avg WER across all samples
-        accuracy = total_correct / total_words
         average_wer = total_wer / num_samples
         print(f"Average WER: {average_wer:.2f}")
-        print(f"accuracy: {accuracy}")
         writer.add_scalar('Average WER', average_wer)
         writer.add_scalar('Average WER', average_wer)
 
+def one_hot_encoding(labels, num_classes):
+    target = torch.zeros(labels.size(0), labels.size(1), num_classes, device=labels.device)
+    # Scatter 1s into tensor according to labels
+    target.scatter_(2, labels.unsqueeze(2), 1)
+    return target
 
+def transformer_temporal_softmax_loss(x, y, mask):
 
+        N, T, V = x.shape
 
+        x_flat = x.reshape(N * T, V)
+        y_flat = y.reshape(N * T)
+        mask_flat = mask.reshape(N * T)
+
+        loss = torch.nn.functional.cross_entropy(x_flat,  y_flat, reduction='none')
+        loss = torch.mul(loss, mask_flat)
+        loss = torch.mean(loss)
+
+        return loss
+
+def plot_grad_flow(named_parameters):
+    ave_grads = []
+    layers = []
+    for n, p in named_parameters:
+        if(p.requires_grad) and ("bias" not in n):
+            layers.append(n)
+            ave_grads.append(p.grad.abs().mean())
+    ave_grads_cpu = [grad.cpu() for grad in ave_grads]
+    plt.plot(ave_grads_cpu, alpha=0.3, color="b")
+    plt.hlines(0, 0, len(ave_grads_cpu)+1, linewidth=1, color="k" )
+    plt.xticks(range(0,len(ave_grads_cpu), 1), layers, rotation="vertical")
+    plt.xlim(xmin=0, xmax=len(ave_grads_cpu))
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow")
+    plt.grid(True)
+    plt.show()
+# def plot_grad_flow(named_parameters):
+#     '''Plots the gradients flowing through different layers in the net during training.
+#     Can be used for checking for possible gradient vanishing / exploding problems.
+    
+#     Usage: Plug this function in Trainer class after loss.backwards() as 
+#     "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
+#     ave_grads = []
+#     max_grads= []
+#     layers = []
+#     for n, p in named_parameters:
+#         if(p.requires_grad) and ("bias" not in n):
+#             layers.append(n)
+#             ave_grads.append(p.grad.abs().mean())
+#             max_grads.append(p.grad.abs().max())
+#     max_grads_cpu = [grad.cpu() for grad in max_grads]
+#     ave_grads_cpu = [grad.cpu() for grad in ave_grads]
+#     plt.bar(np.arange(len(max_grads_cpu)), max_grads_cpu, alpha=0.1, lw=1, color="c")
+#     plt.bar(np.arange(len(ave_grads_cpu)), ave_grads_cpu, alpha=0.1, lw=1, color="b")
+#     plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
+#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
+#     plt.xlim(left=0, right=len(ave_grads))
+#     plt.ylim(bottom = -0.001, top=0.02) # zoom in on the lower gradient regions
+#     plt.xlabel("Layers")
+#     plt.ylabel("average gradient")
+#     plt.title("Gradient flow")
+#     plt.grid(True)
+#     plt.legend([Line2D([0], [0], color="c", lw=4),
+#                 Line2D([0], [0], color="b", lw=4),
+#                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
+#     plt.show() 
+def levenshtein(a, b):
+  """Calculates the Levenshtein distance between a and b.
+  The code was taken from: http://hetland.org/coding/python/levenshtein.py
+  """
+  n, m = len(a), len(b)
+  if n > m:
+    # Make sure n <= m, to use O(min(n,m)) space
+    a, b = b, a
+    n, m = m, n
+  current = list(range(n + 1))
+  for i in range(1, m + 1):
+    previous, current = current, [i] + [0] * n
+    for j in range(1, n + 1):
+      add, delete = previous[j] + 1, current[j - 1] + 1
+      change = previous[j - 1]
+      if a[j - 1] != b[i - 1]:
+        change = change + 1
+      current[j] = min(add, delete, change)
+  return current[n]
 if __name__ == "__main__":
     # device = 'cpu'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -195,7 +288,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
-    # 3e-4  
+    # 3e-4 
     parser.add_argument('--epochs', default=1, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)

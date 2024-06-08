@@ -16,8 +16,13 @@ class LipReadingDataset(Dataset):
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.directory = directory
-        transform = [t.ToTensor(), t.Resize((int(180*resolution), int(180*resolution))), ]  # 90x90
-        self.transform  = t.Compose(transform)
+        # transform = [t.ToTensor(), t.Resize((int(180*resolution), int(180*resolution))), ]  # 90x90
+        # self.transform  = t.Compose(transform)
+        self.transform  = t.Compose([
+            transforms.Resize((96, 96)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
         self.samples = self._load_samples()
         self.resolution = resolution
 

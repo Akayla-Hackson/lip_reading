@@ -9,6 +9,9 @@ from classes.cnn import CNN
 from classes.lstm import LSTM
 from classes.transformer import Transformer
 from classes.lip_reading import LipReadingModel
+from classes.hw_lip_reading import HwLipReadingModel
+from classes.hw_transformer import *
+from classes.hw_transformer_layers import *
 import torch
 import os
 from torch.nn.utils.rnn import pad_sequence
@@ -22,9 +25,35 @@ import numpy as np
 import random
 from torch import nn
 from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
+from jiwer import wer
+from matplotlib.lines import Line2D
+from transformers import GPT2Tokenizer
+from classes.models import *
+from classes.modules import *
+from classes.paper_lipreading import *
+from classes.search import *
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
+# tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+# print(f"tokenitzer vocab size: {tokenizer.vocab_size}")
+
+# pad_token = '<pad>'
+# bos_token = '<bos>'
+# eos_token = '<eos>'
+# unk_token = '<unk>'
+
+pad_token = 0
+bos_token = 101
+eos_token = 102
+
+
+# tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+# tokenizer.pad_token = pad_token
+
+# tokenizer = AutoTokenizer.from_pretrained('bert-large-uncased', cache_dir='checkpoints/tokenizers', use_fast=True)
+tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased', cache_dir='checkpoints/tokenizers', use_fast=True)
+
+# start_symbol, end_symbol = 100, 101
+
 RANDOM_SEED = 1729
 torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
@@ -35,14 +64,24 @@ random.seed(RANDOM_SEED)
 def collate_fn(batch):
     sequences, labels = zip(*batch)
     encoded_labels = tokenizer(labels, add_special_tokens=True, max_length=100, padding="longest",  return_tensors='pt')
-    
     return torch.unsqueeze(torch.stack(sequences[0]), axis=0), encoded_labels
+
 
 
 def main(args):
     now = datetime.datetime.now()
-    model = LipReadingModel()
+    model = LipReadingModel(
+        vocab_size=tokenizer.vocab_size,  
+        feat_dim=512,  # Feature dim
+        hidden_units=512,  # Size of the hidden layers
+        num_heads=8,  # Number of attention heads
+        num_blocks=6,  # Number of transformer blocks
+        dropout_rate=0.1,  
+        device=device,
+        lm_alpha=0.1  # Influence of the language model 
+    )
     model.to(device)
+    model.train()
 
     if args.train:
         save_path = f'{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
@@ -61,34 +100,37 @@ def main(args):
             )
         
         optimizer = torch.optim.AdamW(model.parameters(), betas=(0.99, 0.95), lr=args.learning_rate)
-        # scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100)
         scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=100, num_training_steps=int(len(train_dataset)/args.grad_accum_steps))
-        criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, num_classes, sequence_length] Targets: [batch_size, sequence_length]
+        criterion = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)  # Outputs: [batch_size, vocab size, sequence_length] Targets: [batch_size, sequence_length]
 
+        loss_history = []
         for epoch in range(args.epochs):
             model.train() 
-            total_loss = 0
+            total_loss = 0 
             avg_loss = loss_accum = 0
             
             progress_bar = tqdm(enumerate(data_loader), total=len(data_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
             for batch_idx, (frames, targets) in progress_bar:
-                frames, input_id, masks = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].bool().to(device, non_blocking=True)
+                frames = frames.to(device)
+                input_id = targets['input_ids'].to(device)
+                attention_mask = targets['attention_mask'].to(device)
 
-                # decoded_sequences = tokenizer.batch_decode(input_id, skip_special_tokens=False)
-                # for idx, seq in enumerate(decoded_sequences):
-                #     token_count = (input_id[idx] != tokenizer.pad_token_id).sum()
-                #     print("Decoded sequence:", seq)
-                #     print("Number of tokens (excluding padding):", token_count.item())
-                # tokens = tokenizer.convert_ids_to_tokens(input_id[0])  
-                # print(tokens)
+                frames_mask = torch.ones(frames.shape[0], frames.shape[1], dtype=torch.long).to(device)  # mask is all 1's since no padding is added (batch_size = 1)
 
-                # print(tokenizer.batch_decode(input_id, skip_special_tokens=False))
-                # print(masks)
-                # exit()
-            
-                output = model(frames, input_id, args.train)
+                max_length = frames.shape[1]  # frames is [batch, frames, channels, height, width]
+                # Pad input_ids and attention_mask to match the frames length
+                if input_id.shape[1] < max_length:
+                    padding_needed = max_length - input_id.shape[1]
 
-                loss = criterion(output, input_id) 
+                    padded_input_id = F.pad(input_id, pad=(0, padding_needed), value=tokenizer.pad_token_id)
+                    padded_attention_mask = F.pad(attention_mask, pad=(0, padding_needed), value=0)
+                    input_id = padded_input_id.to(device)
+                    attention_mask = padded_attention_mask.to(device)
+
+                outputs = model(frames, input_id, frames_mask, attention_mask, args.train)
+                outputs = outputs.permute(0,2,1)
+                loss = criterion(outputs, input_id)
+
                 loss_accum += loss
                 loss = loss.detach()
                 total_loss += loss
@@ -105,11 +147,9 @@ def main(args):
 
                 writer.add_scalar('Training Loss', loss, epoch * len(data_loader) + batch_idx)
                 writer.add_scalar('Average Batch Loss', avg_loss/(batch_idx+1), epoch * len(data_loader) + batch_idx)
-                del loss, frames, masks, targets
 
-                
                 print("target \n",tokenizer.batch_decode(input_id))
-                print("Guess \n",tokenizer.batch_decode(torch.argmax(output, dim=1)))
+                print("Guess \n",tokenizer.batch_decode(torch.argmax(outputs, dim=1)))
             average_loss = total_loss / len(data_loader)
             writer.add_scalar('Average Training Loss', average_loss, epoch)
             print(f"Average Loss for Epoch {epoch}: {average_loss}")
@@ -119,64 +159,27 @@ def main(args):
                 'optimizer': optimizer.state_dict(),
                 }
             torch.save(state, f"{epoch}.state")
-    else:
-        save_path = f'Val/{args.data_type}/Batch_size_{args.batch_size}/LR_{args.learning_rate}/Date_{now.month}_{now.day}_hr_{now.hour}'
-        os.makedirs(save_path, exist_ok=True)
-        writer = SummaryWriter(f'runs/{save_path}')
-
-        model.load_state_dict(torch.load("0.state")['state_dict'])
-        model.eval()
-        print(model)
-
-        val_dataset = LipReadingDataset(directory='./LRS2/data_splits/val' if os.getlogin() != "darke" else "D:/classes/cs231n/project/LRS2/data_splits/val", transform=None)
-        val_data_loader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        collate_fn=collate_fn,
-        num_workers=args.num_workers,
-        pin_memory=False,
-        )
-
-        total_words = 0
-        total_wer = 0.0
-        num_samples = 0
-        print("Total samples loaded for validation:", len(val_data_loader))  
-
-        for batch_idx, (frames, targets) in enumerate(val_data_loader):
-            with torch.no_grad():
-                frames, input_id, mask = frames.to(device, non_blocking=True), targets['input_ids'].to(device, non_blocking=True), targets['attention_mask'].to(device, non_blocking=True)
-                print("target \n",tokenizer.batch_decode(input_id))
-                output = model(frames, input_id, args.train)
-                output = output.argmax(axis=1)
-                
-                predicted_texts = tokenizer.batch_decode(output, skip_special_tokens=True)
-                reference_texts = tokenizer.batch_decode(input_id, skip_special_tokens=True)
-                
-                # Calc WER for each item in the batch and accumulate
-                for predicted, reference in zip(predicted_texts, reference_texts):
-                    sample_wer = wer(reference, predicted)
-                    total_wer += sample_wer
-                    num_samples += 1
-                total_correct += torch.sum(output == input_id).detach().item()
-                total_words += input_id.shape[1] # this only works if its 1 batch size since other wise they will be padded
-                # print("Predictions:", predicted_texts)
-                # print("References:", reference_texts)
-
-            print("target \n",tokenizer.batch_decode(input_id))
-            print("Guess \n",tokenizer.batch_decode(output))
-            print("WER:", sample_wer)
-            writer.add_scalar('Val WER', sample_wer, len(val_data_loader) + batch_idx)
-        
-        # Calc avg WER across all samples
-        accuracy = total_correct / total_words
-        average_wer = total_wer / num_samples
-        print(f"Average WER: {average_wer:.2f}")
-        print(f"accuracy: {accuracy}")
-        writer.add_scalar('Average WER', average_wer)
-        writer.add_scalar('Average WER', average_wer)
 
 
+def levenshtein(a, b):
+  """Calculates the Levenshtein distance between a and b.
+  The code was taken from: http://hetland.org/coding/python/levenshtein.py
+  """
+  n, m = len(a), len(b)
+  if n > m:
+    # Make sure n <= m, to use O(min(n,m)) space
+    a, b = b, a
+    n, m = m, n
+  current = list(range(n + 1))
+  for i in range(1, m + 1):
+    previous, current = current, [i] + [0] * n
+    for j in range(1, n + 1):
+      add, delete = previous[j] + 1, current[j - 1] + 1
+      change = previous[j - 1]
+      if a[j - 1] != b[i - 1]:
+        change = change + 1
+      current[j] = min(add, delete, change)
+  return current[n]
 
 
 if __name__ == "__main__":
@@ -195,7 +198,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_workers', default=4, type=int, help='num of workes for the dataloader')
 
     parser.add_argument('--learning_rate', default=0.001, type=int, help='learning rate for optimizer')
-    # 3e-4  
+    # 3e-4 
     parser.add_argument('--epochs', default=1, type=int, help='num epoch to train for')
     args = parser.parse_args()
     main(args)
