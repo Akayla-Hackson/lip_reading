@@ -142,7 +142,7 @@ def train_lrw(args):
         #         'optimizer': optimizer.state_dict(),
         #         }
         #     torch.save(state, f"{epoch}.state")
-        if (epoch + 1) % 1 == 0:
+        if (epoch + 1) % 10 == 0:
             misclassified_words = defaultdict(int) 
             model.eval()
             with torch.no_grad():
