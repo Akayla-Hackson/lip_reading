@@ -1,6 +1,5 @@
 import torchvision.models as models
 from torch import nn
-from classes.cnn import CNN
 from classes.lstm import LSTM
 from classes.transformer import Transformer
 from classes.video_cnn import ResNet, BasicBlock
@@ -10,7 +9,7 @@ import torch
 class LipReadingModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv3d = nn.Conv3d(in_channels=3, out_channels=64, kernel_size=(5, 7, 7), stride=(1, 2, 2), padding=(2, 3, 3))
+        self.conv3d = nn.Conv3d(in_channels=1, out_channels=64, kernel_size=(5, 7, 7), stride=(1, 2, 2), padding=(2, 3, 3))
         self.bn = nn.BatchNorm3d(num_features=64)
         self.relu = nn.ReLU()
         self.pool = nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1))
