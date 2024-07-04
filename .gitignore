@@ -22,3 +22,4 @@ runs
 saved_weights
 runs_speak
 *.json
+final.zip
